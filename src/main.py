@@ -3,6 +3,7 @@ import heapq
 import time
 import os
 
+from asyncio import AbstractEventLoop
 import plotly.express as px  # type: ignore
 import pandas as pd  # type: ignore
 
@@ -370,12 +371,67 @@ def price_shock_plot(levs, oracle_distort):
     # st.write(df[df['spot_asset']<df['spot_liability']])
         
 
+def plot_page(loop: AbstractEventLoop, vat: Vat, drift_client: DriftClient):
+    cov = st.selectbox('covariance:', ['ignore stables', 
+                                        'sol + lst only',
+                                        'meme',
+                                        ], index=0)
+
+    # st.write(len([x for x in vat.users.values()]), 'users loaded')
+
+    user_keys = list(vat.users.user_map.keys())
+    st.write(len(user_keys), 'drift users')
+    start_time = time.time()
+
+    oracle_distort = .2
+
+    levs, user_keys, distorted_oracles =  loop.run_until_complete(get_usermap_df(drift_client, vat.users,
+                                                                'oracles', oracle_distort, 
+                                                                None, cov))
+    # levs[0]
+    end_time = time.time()
+    time_to_run = end_time - start_time
+    st.write(time_to_run, 'seconds to run', 1+len(levs[1])+len(levs[2]), 'price-shock scenarios')
+
+    price_shock_plot(levs, oracle_distort)
+
+    oracle_down_max = pd.DataFrame(levs[-1][-1], index=user_keys)
+    with st.expander(str('oracle down max bankrupt count=')+str(len(oracle_down_max[oracle_down_max.net_usd_value<0]))):
+        st.dataframe(oracle_down_max)
+
+
+    oracle_up_max = pd.DataFrame(levs[1][-1], index=user_keys)
+    with st.expander(str('oracle up max bankrupt count=')+str(len(oracle_up_max[oracle_up_max.net_usd_value<0]))):
+        st.dataframe(oracle_up_max)
+
+    with st.expander('distorted oracle keys'):
+        st.write(distorted_oracles)
+
+
+
 def main():
     st.set_page_config(layout="wide")
 
     url = os.getenv("RPC_URL", "🤫")
 
     rpc = st.sidebar.text_input("RPC URL", value=url)
+
+    query_index = 0
+    def query_string_callback():
+        st.query_params(**{'tab': st.session_state.query_key})
+    query_tab = st.query_params.get('tab', ['Welcome'])[0]
+    tab_options = ('Welcome', 'Health', 'Price-Shock')
+    for idx, x in enumerate(tab_options):
+        if x.lower() == query_tab.lower():
+            query_index = idx
+
+    tab = st.sidebar.radio(
+        "Select Tab:",
+        tab_options,
+        query_index,
+        on_change=query_string_callback,
+        key='query_key'
+        )
 
     if rpc == "🤫" or rpc == "":
         st.warning("Please enter a Solana RPC URL")
@@ -387,7 +443,7 @@ def main():
         )
 
         # start_sub = time.time()
-        loop = asyncio.new_event_loop()
+        loop: AbstractEventLoop = asyncio.new_event_loop()
         # loop.run_until_complete(dc.subscribe())
         # print(f"subscribed in {time.time() - start_sub}")
 
@@ -397,29 +453,33 @@ def main():
         vat = loop.run_until_complete(load_vat(drift_client, newest_snapshot))
         print(f"loaded vat in {time.time() - start_load_vat}")
 
-        st.write(len([x for x in vat.users.values()]), 'users loaded')
-        health_distribution = get_account_health_distribution(vat)
+        if tab.lower() == 'health':
 
-        with st.container():
-            st.plotly_chart(health_distribution, use_container_width=True)
+            health_distribution = get_account_health_distribution(vat)
 
-        perp_col, spot_col = st.columns([1, 1])
+            with st.container():
+                st.plotly_chart(health_distribution, use_container_width=True)
 
-        with perp_col:
-            largest_perp_positions = get_largest_perp_positions(vat)
-            st.markdown("### **Largest perp positions:**")
-            st.table(largest_perp_positions)
-            most_levered_positions = get_most_levered_perp_positions_above_1m(vat)
-            st.markdown("### **Most levered perp positions > $1m:**")
-            st.table(most_levered_positions)
+            perp_col, spot_col = st.columns([1, 1])
 
-        with spot_col:
-            largest_spot_borrows = get_largest_spot_borrows(vat)
-            st.markdown("### **Largest spot borrows:**")
-            st.table(largest_spot_borrows)
-            most_levered_borrows = get_most_levered_spot_borrows_above_1m(vat)
-            st.markdown("### **Most levered spot borrows > $750k:**")
-            st.table(most_levered_borrows)
+            with perp_col:
+                largest_perp_positions = get_largest_perp_positions(vat)
+                st.markdown("### **Largest perp positions:**")
+                st.table(largest_perp_positions)
+                most_levered_positions = get_most_levered_perp_positions_above_1m(vat)
+                st.markdown("### **Most levered perp positions > $1m:**")
+                st.table(most_levered_positions)
+
+            with spot_col:
+                largest_spot_borrows = get_largest_spot_borrows(vat)
+                st.markdown("### **Largest spot borrows:**")
+                st.table(largest_spot_borrows)
+                most_levered_borrows = get_most_levered_spot_borrows_above_1m(vat)
+                st.markdown("### **Most levered spot borrows > $750k:**")
+                st.table(most_levered_borrows)
+
+        elif tab.lower() == 'price-shock':
+            plot_page(loop, vat, drift_client)
 
 
 main()

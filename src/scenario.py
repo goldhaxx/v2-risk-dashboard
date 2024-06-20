@@ -69,7 +69,8 @@ def get_perp_lp_share_composition(x: DriftUser, n):
     net_p = {i: get_lp_shares(x, i) for i in range(n)}
     return net_p 
 
-async def get_usermap_df(_drift_client, user_map, mode, oracle_distor=.1, only_one_index=None, cov_matrix=None):
+async def get_usermap_df(_drift_client: DriftClient, user_map: UserMap, mode: str, oracle_distor=.1, 
+                         only_one_index=None, cov_matrix=None):
     perp_n = NUMBER_OF_PERP
     spot_n = NUMBER_OF_SPOT
 
