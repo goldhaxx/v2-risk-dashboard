@@ -295,54 +295,9 @@ def get_most_levered_spot_borrows_above_1m(vat: Vat):
     return data
 
 
-def price_shock_plot(levs, oracle_distort):
-    # perp_market_inspect = 0 # sol-perp
-    # def get_rattt(row):
-    #     # st.write(row)
-    #     df1 = pd.Series([val/row['spot_asset'] * (row['perp_liability']+row['spot_liability']) 
-    #                     if val > 0 else 0 for key,val in row['net_v'].items()]
-    #                     )
-    #     df1.index = ['spot_'+str(x)+'_all' for x in df1.index]
+def price_shock_plot(price_scenario_users: list[Any], oracle_distort: float):
 
-    #     df2 = pd.Series([val/(row['spot_asset']) * (row['perp_liability']) 
-    #                     if val > 0 else 0 for key,val in row['net_v'].items()]
-    #                     )
-    #     df2.index = ['spot_'+str(x)+'_all_perp' for x in df2.index]
-
-    #     df3 = pd.Series([val/(row['spot_asset']) * (row['spot_liability']) 
-    #                     if val > 0 else 0 for key,val in row['net_v'].items()]
-    #                     )
-    #     df3.index = ['spot_'+str(x)+'_all_spot' for x in df3.index]
-        
-    #     df4 = pd.Series([val/(row['spot_asset']) * (row['net_p'][perp_market_inspect]) 
-    #                     if val > 0 and row['net_p'][0] > 0 else 0 for key,val in row['net_v'].items()]
-    #                     )
-    #     df4.index = ['spot_'+str(x)+'_perp_'+str(perp_market_inspect)+'_long' for x in df4.index]
-
-    #     df5 = pd.Series([val/(row['spot_asset']) * (row['net_p'][perp_market_inspect]) 
-    #                     if val > 0 and row['net_p'][perp_market_inspect] < 0 else 0 for key,val in row['net_v'].items()]
-    #                     )
-    #     df5.index = ['spot_'+str(x)+'_perp_'+str(perp_market_inspect)+'_short' for x in df5.index]
-        
-    #     dffin = pd.concat([
-    #         df1,
-    #         df2,
-    #         df3,
-    #         df4,
-    #         df5,
-    #     ])
-    #     return dffin
-    # df = pd.concat([df, df.apply(get_rattt, axis=1)],axis=1)
-    # res = pd.DataFrame({('spot'+str(i)): (df["spot_"+str(i)+'_all'].sum(), 
-    #                                     df["spot_"+str(i)+'_all_spot'].sum(),
-    #                                     df["spot_"+str(i)+'_all_perp'].sum() ,
-    #                                     df["spot_"+str(i)+'_perp_'+str(perp_market_inspect)+'_long'].sum(),
-    #                                     df["spot_"+str(i)+'_perp_'+str(perp_market_inspect)+'_short'].sum())
-    #                                     for i in range(NUMBER_OF_SPOT)},
-                                        
-                    
-    #                 index=['all_liabilities', 'all_spot', 'all_perp', 'perp_0_long', 'perp_0_short'])
-    # levs = [df, [df], [df]]
+    levs = price_scenario_users
     dfs = [pd.DataFrame(levs[2][i]) for i in range(len(levs[2]))] \
     + [pd.DataFrame(levs[0])] \
     + [pd.DataFrame(levs[1][i]) for i in range(len(levs[1]))]
@@ -368,7 +323,6 @@ def price_shock_plot(levs, oracle_distort):
                     xaxis_title='Oracle Move (%)',
                     yaxis_title='Bankruptcy ($)')
     st.plotly_chart(toplt_fig)
-    # st.write(df[df['spot_asset']<df['spot_liability']])
         
 
 def plot_page(loop: AbstractEventLoop, vat: Vat, drift_client: DriftClient):
@@ -389,22 +343,22 @@ def plot_page(loop: AbstractEventLoop, vat: Vat, drift_client: DriftClient):
     start_time = time.time()
 
 
-    levs, user_keys, distorted_oracles =  loop.run_until_complete(get_usermap_df(drift_client, vat.users,
+    price_scenario_users, user_keys, distorted_oracles =  loop.run_until_complete(get_usermap_df(drift_client, vat.users,
                                                                 'oracles', oracle_distort, 
                                                                 None, cov))
     # levs[0]
     end_time = time.time()
     time_to_run = end_time - start_time
-    st.write(time_to_run, 'seconds to run', 1+len(levs[1])+len(levs[2]), 'price-shock scenarios')
+    st.write(time_to_run, 'seconds to run', 1+len(price_scenario_users[1])+len(price_scenario_users[2]), 'price-shock scenarios')
 
-    price_shock_plot(levs, oracle_distort)
+    price_shock_plot(price_scenario_users, oracle_distort)
 
-    oracle_down_max = pd.DataFrame(levs[-1][-1], index=user_keys)
+    oracle_down_max = pd.DataFrame(price_scenario_users[-1][-1], index=user_keys)
     with st.expander(str('oracle down max bankrupt count=')+str(len(oracle_down_max[oracle_down_max.net_usd_value<0]))):
         st.dataframe(oracle_down_max)
 
 
-    oracle_up_max = pd.DataFrame(levs[1][-1], index=user_keys)
+    oracle_up_max = pd.DataFrame(price_scenario_users[1][-1], index=user_keys)
     with st.expander(str('oracle up max bankrupt count=')+str(len(oracle_up_max[oracle_up_max.net_usd_value<0]))):
         st.dataframe(oracle_up_max)
 
