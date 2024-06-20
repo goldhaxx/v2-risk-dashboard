@@ -372,10 +372,15 @@ def price_shock_plot(levs, oracle_distort):
         
 
 def plot_page(loop: AbstractEventLoop, vat: Vat, drift_client: DriftClient):
-    cov = st.selectbox('covariance:', ['ignore stables', 
+
+    cov_col, distort_col = st.columns(2)
+    cov = cov_col.selectbox('covariance:', ['ignore stables', 
                                         'sol + lst only',
                                         'meme',
                                         ], index=0)
+
+    oracle_distort = distort_col.selectbox('oracle distortion:', [.05, .1, .2, .5, 1], index=0,
+                                           help='step size of oracle distortions')
 
     # st.write(len([x for x in vat.users.values()]), 'users loaded')
 
@@ -383,7 +388,6 @@ def plot_page(loop: AbstractEventLoop, vat: Vat, drift_client: DriftClient):
     st.write(len(user_keys), 'drift users')
     start_time = time.time()
 
-    oracle_distort = .2
 
     levs, user_keys, distorted_oracles =  loop.run_until_complete(get_usermap_df(drift_client, vat.users,
                                                                 'oracles', oracle_distort, 
