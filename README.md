@@ -11,6 +11,8 @@ Quick Start:
 Current Metrics:
 1. Largest perp positions
 2. Largest spot borrows
+3. Account health distribution
+4. Most levered perp positions > $1m notional
+5. Most levered spot borrows > $750k notional
 
 WIP Metrics:
-
