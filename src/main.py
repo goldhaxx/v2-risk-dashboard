@@ -302,7 +302,6 @@ def main():
     rpc = st.sidebar.text_input("RPC URL", value=url)
 
     if rpc == "🤫" or rpc == "":
-        # Display a message to the user asking for the RPC URL
         st.warning("Please enter a Solana RPC URL")
     else:
         dc = DriftClient(
