@@ -376,7 +376,7 @@ def main():
 
     query_index = 0
     def query_string_callback():
-        st.query_params(**{'tab': st.session_state.query_key})
+        st.query_params['tab'] = st.session_state.query_key
     query_tab = st.query_params.get('tab', ['Welcome'])[0]
     tab_options = ('Welcome', 'Health', 'Price-Shock')
     for idx, x in enumerate(tab_options):
