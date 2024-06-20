@@ -3,8 +3,8 @@ import heapq
 import time
 import os
 
-import plotly.express as px # type: ignore
-import pandas as pd # type: ignore
+import plotly.express as px  # type: ignore
+import pandas as pd  # type: ignore
 
 from typing import Any
 
@@ -110,9 +110,32 @@ def get_largest_spot_borrows(vat: Vat):
 
     return data
 
+
 def get_account_health_distribution(vat: Vat):
-    health_notional_distributions = { "0-10%": 0, "10-20%": 0, "20-30%": 0, "30-40%": 0, "40-50%": 0, "50-60%": 0, "60-70%": 0, "70-80%": 0, "80-90%": 0, "90-100%": 0}
-    health_counts = { "0-10%": 0, "10-20%": 0, "20-30%": 0, "30-40%": 0, "40-50%": 0, "50-60%": 0, "60-70%": 0, "70-80%": 0, "80-90%": 0, "90-100%": 0}
+    health_notional_distributions = {
+        "0-10%": 0,
+        "10-20%": 0,
+        "20-30%": 0,
+        "30-40%": 0,
+        "40-50%": 0,
+        "50-60%": 0,
+        "60-70%": 0,
+        "70-80%": 0,
+        "80-90%": 0,
+        "90-100%": 0,
+    }
+    health_counts = {
+        "0-10%": 0,
+        "10-20%": 0,
+        "20-30%": 0,
+        "30-40%": 0,
+        "40-50%": 0,
+        "50-60%": 0,
+        "60-70%": 0,
+        "70-80%": 0,
+        "80-90%": 0,
+        "90-100%": 0,
+    }
 
     for user in vat.users.values():
         total_collateral = user.get_total_collateral() / PRICE_PRECISION
@@ -148,21 +171,29 @@ def get_account_health_distribution(vat: Vat):
             case _:
                 health_notional_distributions["90-100%"] += total_collateral
                 health_counts["90-100%"] += 1
-    df = pd.DataFrame({
-        'Health Range': list(health_counts.keys()),
-        'Counts': list(health_counts.values()),
-        'Notional Values': list(health_notional_distributions.values())
-    })
+    df = pd.DataFrame(
+        {
+            "Health Range": list(health_counts.keys()),
+            "Counts": list(health_counts.values()),
+            "Notional Values": list(health_notional_distributions.values()),
+        }
+    )
 
-    fig = px.bar(df, x='Health Range', y='Counts', title="Health Distribution",
-                hover_data={'Notional Values': ':,'}, # Custom format for notional values
-                labels={'Counts': 'Num Users', 'Notional Values': 'Notional Value ($)'})
+    fig = px.bar(
+        df,
+        x="Health Range",
+        y="Counts",
+        title="Health Distribution",
+        hover_data={"Notional Values": ":,"},  # Custom format for notional values
+        labels={"Counts": "Num Users", "Notional Values": "Notional Value ($)"},
+    )
 
     fig.update_traces(
         hovertemplate="<b>Health Range: %{x}</b><br>Count: %{y}<br>Notional Value: $%{customdata[0]:,.0f}<extra></extra>"
     )
 
     return fig
+
 
 def get_most_levered_perp_positions_above_1m(vat: Vat):
     top_positions: list[Any] = []
@@ -195,7 +226,9 @@ def get_most_levered_perp_positions_above_1m(vat: Vat):
 
     positions = sorted(
         top_positions,  # We can sort directly the heap result
-        key=lambda x: x[4],  # Sort by leverage, which is the fifth element in your tuple
+        key=lambda x: x[
+            4
+        ],  # Sort by leverage, which is the fifth element in your tuple
     )
 
     positions.reverse()
@@ -210,6 +243,7 @@ def get_most_levered_perp_positions_above_1m(vat: Vat):
 
     return data
 
+
 def get_most_levered_spot_borrows_above_1m(vat: Vat):
     top_borrows: list[Any] = []
 
@@ -217,7 +251,10 @@ def get_most_levered_spot_borrows_above_1m(vat: Vat):
         total_collateral = user.get_total_collateral() / PRICE_PRECISION
         if total_collateral > 0:
             for position in user.get_user_account().spot_positions:
-                if is_variant(position.balance_type, "Borrow") and position.scaled_balance > 0:
+                if (
+                    is_variant(position.balance_type, "Borrow")
+                    and position.scaled_balance > 0
+                ):
                     market_price = vat.spot_oracles.get(position.market_index)
                     if market_price is not None:
                         market_price_ui = market_price.price / PRICE_PRECISION
@@ -238,7 +275,7 @@ def get_most_levered_spot_borrows_above_1m(vat: Vat):
                                 heapq.heappush(top_borrows, heap_item)
                             else:
                                 heapq.heappushpop(top_borrows, heap_item)
-    
+
     borrows = sorted(
         top_borrows,
         key=lambda x: x[4],
@@ -255,6 +292,7 @@ def get_most_levered_spot_borrows_above_1m(vat: Vat):
     }
 
     return data
+
 
 def main():
     st.set_page_config(layout="wide")
@@ -299,7 +337,6 @@ def main():
             st.markdown("### **Most levered perp positions > $1m:**")
             st.table(most_levered_positions)
 
-
         with spot_col:
             largest_spot_borrows = get_largest_spot_borrows(vat)
             st.markdown("### **Largest spot borrows:**")
@@ -307,5 +344,6 @@ def main():
             most_levered_borrows = get_most_levered_spot_borrows_above_1m(vat)
             st.markdown("### **Most levered spot borrows > $750k:**")
             st.table(most_levered_borrows)
+
 
 main()
