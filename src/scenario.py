@@ -34,7 +34,7 @@ from anchorpy import EventParser
 import asyncio
 from driftpy.math.margin import MarginCategory
 import requests
-from driftpy.types import InsuranceFundStakeAccount, SpotMarketAccount
+from driftpy.types import InsuranceFundStakeAccount, SpotMarketAccount, OraclePriceData
 from driftpy.addresses import * 
 import time
 from driftpy.market_map.market_map_config import WebsocketConfig
@@ -70,7 +70,7 @@ def get_perp_lp_share_composition(x: DriftUser, n):
     return net_p 
 
 async def get_usermap_df(_drift_client: DriftClient, user_map: UserMap, mode: str, oracle_distor=.1, 
-                         only_one_index=None, cov_matrix=None):
+                         only_one_index=None, cov_matrix=None, n_scenarios=5, all_fields=False):
     perp_n = NUMBER_OF_PERP
     spot_n = NUMBER_OF_SPOT
 
@@ -107,6 +107,11 @@ async def get_usermap_df(_drift_client: DriftClient, user_map: UserMap, mode: st
         # 'unsettled_pnl_perp_x': x.get_unrealized_pnl(True, market_index=24) / QUOTE_PRECISION,
         }
         levs0['net_usd_value'] = levs0['spot_asset'] + levs0['upnl'] - levs0['spot_liability']
+
+        if all_fields:
+            levs0['net_v'] = get_collateral_composition(x, margin_category, spot_n)
+            levs0['net_p'] = get_perp_liab_composition(x, margin_category, spot_n)
+
         return levs0
     user_map_result: UserMap = user_map
     
@@ -140,7 +145,7 @@ async def get_usermap_df(_drift_client: DriftClient, user_map: UserMap, mode: st
         # print(levs_none[0].keys(), levs_init[0].keys(), levs_maint[0].keys())
         return (levs_none, levs_init, levs_maint), user_keys
     else:
-        num_entrs = 5 # increment to get more steps
+        num_entrs = n_scenarios # increment to get more steps
         new_oracles_dat_up = []
         new_oracles_dat_down = []
 
@@ -150,7 +155,7 @@ async def get_usermap_df(_drift_client: DriftClient, user_map: UserMap, mode: st
 
 
         assert(len(new_oracles_dat_down) == num_entrs)
-        await _drift_client.account_subscriber.update_cache()
+        # await _drift_client.account_subscriber.update_cache()
 
         # cache_ff = 'drift_client_cache.pickle'
         # if os.path.exists(cache_ff):
@@ -182,8 +187,13 @@ async def get_usermap_df(_drift_client: DriftClient, user_map: UserMap, mode: st
                     oracle_distort_up = max(1 + oracle_distor * (i+1), 1)
                     oracle_distort_down = max(1 - oracle_distor * (i+1), 0)
 
-                    new_oracles_dat_up[i][key].data.price *= oracle_distort_up
-                    new_oracles_dat_down[i][key].data.price *= oracle_distort_down
+                    #weird pickle artifact
+                    if isinstance(new_oracles_dat_up[i][key], OraclePriceData):
+                        new_oracles_dat_up[i][key].price *= oracle_distort_up
+                        new_oracles_dat_down[i][key].price *= oracle_distort_down
+                    else:
+                        new_oracles_dat_up[i][key].data.price *= oracle_distort_up
+                        new_oracles_dat_down[i][key].data.price *= oracle_distort_down
 
         levs_none = list(do_dict(x, None, None) for x in user_vals)
         levs_up = []

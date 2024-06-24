@@ -14,7 +14,7 @@ from solana.rpc.async_api import AsyncClient
 from anchorpy import Wallet
 
 import streamlit as st
-
+from driftpy.drift_user import DriftUser
 from driftpy.drift_client import DriftClient
 from driftpy.account_subscription_config import AccountSubscriptionConfig
 from driftpy.constants.numeric_constants import (
@@ -24,6 +24,8 @@ from driftpy.constants.numeric_constants import (
 )
 from driftpy.types import is_variant
 from driftpy.pickle.vat import Vat
+from driftpy.constants.spot_markets import mainnet_spot_market_configs, devnet_spot_market_configs
+from driftpy.constants.perp_markets import mainnet_perp_market_configs, devnet_perp_market_configs
 
 from utils import load_newest_files, load_vat, to_financial
 from scenario import get_usermap_df
@@ -295,37 +297,117 @@ def get_most_levered_spot_borrows_above_1m(vat: Vat):
     return data
 
 
-def price_shock_plot(price_scenario_users: list[Any], oracle_distort: float):
+def asset_liab_matrix_page(loop: AbstractEventLoop, vat: Vat, drift_client: DriftClient, env='mainnet'):
+    NUMBER_OF_SPOT = 18
+    NUMBER_OF_PERP = 32
 
-    levs = price_scenario_users
-    dfs = [pd.DataFrame(levs[2][i]) for i in range(len(levs[2]))] \
-    + [pd.DataFrame(levs[0])] \
-    + [pd.DataFrame(levs[1][i]) for i in range(len(levs[1]))]
+    oracle_distort = 0
+    price_scenario_users, user_keys, distorted_oracles =  loop.run_until_complete(get_usermap_df(drift_client, vat.users,
+                                                                'oracles', oracle_distort, 
+                                                                None, 'ignore stables', n_scenarios=0, all_fields=True))
     
-    spot_bankrs = []
-    for df in dfs:
-        spot_b_t1 = -(df[(df['spot_asset']<df['spot_liability']) & (df['net_usd_value']<0)])
-        spot_bankrs.append(-(spot_b_t1['spot_liability'] - spot_b_t1['spot_asset']).sum())
+    df = pd.DataFrame(price_scenario_users[0], index=user_keys)
 
-    xdf = [[-df[df['net_usd_value']<0]['net_usd_value'].sum() for df in dfs],
-            spot_bankrs
-        ]
-    toplt_fig = pd.DataFrame(xdf, 
-                                index=['bankruptcy', 'spot bankrupt'],
-                                columns=[oracle_distort*(i+1)*-100 for i in range(len(levs[2]))]\
-                                +[0]\
-                                +[oracle_distort*(i+1)*100 for i in range(len(levs[1]))]).T
-    toplt_fig['perp bankrupt'] = toplt_fig['bankruptcy'] - toplt_fig['spot bankrupt']
-    toplt_fig = toplt_fig.sort_index()
-    toplt_fig = toplt_fig.plot()
-        # Customize the layout if needed
-    toplt_fig.update_layout(title='Bankruptcies in crypto price scenarios',
-                    xaxis_title='Oracle Move (%)',
-                    yaxis_title='Bankruptcy ($)')
-    st.plotly_chart(toplt_fig)
+    
+    perp_market_inspect = 0 # sol-perp
+    def get_rattt(row):
+        df1 = pd.Series([val/row['spot_asset'] * (row['perp_liability']+row['spot_liability']) 
+                        if val > 0 else 0 for key,val in row['net_v'].items()]
+                        )
+        df1.index = ['spot_'+str(x)+'_all' for x in df1.index]
+
+        df2 = pd.Series([val/(row['spot_asset']) * (row['perp_liability']) 
+                        if val > 0 else 0 for key,val in row['net_v'].items()]
+                        )
+        df2.index = ['spot_'+str(x)+'_all_perp' for x in df2.index]
+
+        df3 = pd.Series([val/(row['spot_asset']) * (row['spot_liability']) 
+                        if val > 0 else 0 for key,val in row['net_v'].items()]
+                        )
+        df3.index = ['spot_'+str(x)+'_all_spot' for x in df3.index]
+        
+        df4 = pd.Series([val/(row['spot_asset']) * (row['net_p'][perp_market_inspect]) 
+                        if val > 0 and row['net_p'][0] > 0 else 0 for key,val in row['net_v'].items()]
+                        )
+        df4.index = ['spot_'+str(x)+'_perp_'+str(perp_market_inspect)+'_long' for x in df4.index]
+
+        df5 = pd.Series([val/(row['spot_asset']) * (row['net_p'][perp_market_inspect]) 
+                        if val > 0 and row['net_p'][perp_market_inspect] < 0 else 0 for key,val in row['net_v'].items()]
+                        )
+        df5.index = ['spot_'+str(x)+'_perp_'+str(perp_market_inspect)+'_short' for x in df5.index]
         
 
+
+        
+        dffin = pd.concat([
+            df1,
+            df2,
+            df3,
+            df4,
+            df5,
+        ])
+        return dffin
+    df = pd.concat([df, df.apply(get_rattt, axis=1)],axis=1)
+    res = pd.DataFrame({('spot'+str(i)): (df["spot_"+str(i)+'_all'].sum(), 
+                                        df["spot_"+str(i)+'_all_spot'].sum(),
+                                        df["spot_"+str(i)+'_all_perp'].sum() ,
+                                        df["spot_"+str(i)+'_perp_'+str(perp_market_inspect)+'_long'].sum(),
+                                        df["spot_"+str(i)+'_perp_'+str(perp_market_inspect)+'_short'].sum())
+                                        for i in range(NUMBER_OF_SPOT)},
+                                        
+                    
+                    index=['all_liabilities', 'all_spot', 'all_perp', 
+                           'perp_'+str(perp_market_inspect)+'_long', 
+                           'perp_'+str(perp_market_inspect)+'_short']).T
+
+    if env == 'mainnet': #mainnet_spot_market_configs
+        res.index = [x.symbol for x in mainnet_spot_market_configs]
+        res.index.name = 'spot assets'
+
+    matcol, detcol = st.columns(2)
+    matcol.write(res)
+    tabs = detcol.tabs(['FULL'] + [x.symbol for x in mainnet_spot_market_configs])
+
+    tabs[0].dataframe(df)
+
+    for idx, tab in enumerate(tabs[1:]):
+        important_cols = [x for x in df.columns if 'spot_'+str(idx) in x]
+        toshow = df[['spot_asset', 'net_usd_value']+important_cols]
+        toshow = toshow[toshow[important_cols].abs().sum(axis=1)!=0].sort_values(by="spot_"+str(idx)+'_all', ascending=False)
+        tab.write(f'{ len(toshow)} users with this asset to cover liabilities')
+        tab.dataframe(toshow)
+
+
 def plot_page(loop: AbstractEventLoop, vat: Vat, drift_client: DriftClient):
+
+    def price_shock_plot(price_scenario_users: list[Any], oracle_distort: float):
+        levs = price_scenario_users
+        dfs = [pd.DataFrame(levs[2][i]) for i in range(len(levs[2]))] \
+        + [pd.DataFrame(levs[0])] \
+        + [pd.DataFrame(levs[1][i]) for i in range(len(levs[1]))]
+        
+        spot_bankrs = []
+        for df in dfs:
+            spot_b_t1 = -(df[(df['spot_asset']<df['spot_liability']) & (df['net_usd_value']<0)])
+            spot_bankrs.append(-(spot_b_t1['spot_liability'] - spot_b_t1['spot_asset']).sum())
+
+        xdf = [[-df[df['net_usd_value']<0]['net_usd_value'].sum() for df in dfs],
+                spot_bankrs
+            ]
+        toplt_fig = pd.DataFrame(xdf, 
+                                    index=['bankruptcy', 'spot bankrupt'],
+                                    columns=[oracle_distort*(i+1)*-100 for i in range(len(levs[2]))]\
+                                    +[0]\
+                                    +[oracle_distort*(i+1)*100 for i in range(len(levs[1]))]).T
+        toplt_fig['perp bankrupt'] = toplt_fig['bankruptcy'] - toplt_fig['spot bankrupt']
+        toplt_fig = toplt_fig.sort_index()
+        toplt_fig = toplt_fig.plot()
+            # Customize the layout if needed
+        toplt_fig.update_layout(title='Bankruptcies in crypto price scenarios',
+                        xaxis_title='Oracle Move (%)',
+                        yaxis_title='Bankruptcy ($)')
+        st.plotly_chart(toplt_fig)
+            
 
     cov_col, distort_col = st.columns(2)
     cov = cov_col.selectbox('covariance:', ['ignore stables', 
@@ -335,8 +417,6 @@ def plot_page(loop: AbstractEventLoop, vat: Vat, drift_client: DriftClient):
 
     oracle_distort = distort_col.selectbox('oracle distortion:', [.05, .1, .2, .5, 1], index=0,
                                            help='step size of oracle distortions')
-
-    # st.write(len([x for x in vat.users.values()]), 'users loaded')
 
     user_keys = list(vat.users.user_map.keys())
     st.write(len(user_keys), 'drift users')
@@ -378,7 +458,7 @@ def main():
     def query_string_callback():
         st.query_params['tab'] = st.session_state.query_key
     query_tab = st.query_params.get('tab', ['Welcome'])[0]
-    tab_options = ('Welcome', 'Health', 'Price-Shock')
+    tab_options = ('Welcome', 'Health', 'Price-Shock', 'Asset-Liab-Matrix')
     for idx, x in enumerate(tab_options):
         if x.lower() == query_tab.lower():
             query_index = idx
@@ -438,6 +518,7 @@ def main():
 
         elif tab.lower() == 'price-shock':
             plot_page(loop, vat, drift_client)
-
+        elif tab.lower() == 'asset-liab-matrix':
+            asset_liab_matrix_page(loop, vat, drift_client)
 
 main()
