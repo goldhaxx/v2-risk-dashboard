@@ -45,6 +45,7 @@ def get_matrix(loop: AbstractEventLoop, vat: Vat, drift_client: DriftClient, env
         calculations = [
             ('all_assets', lambda v: v if v > 0 else 0),  # Simplified from v / row['spot_asset'] * row['spot_asset']
             ('all', lambda v: v / row['spot_asset'] * (row['perp_liability'] + row['spot_liability']) if v > 0 else 0),
+            ('leverage', row['leverage']),
             ('all_perp', lambda v: v / row['spot_asset'] * row['perp_liability'] if v > 0 else 0),
             ('all_spot', lambda v: v / row['spot_asset'] * row['spot_liability'] if v > 0 else 0),
             (f'perp_{perp_market_inspect}_long', lambda v: v / row['spot_asset'] * row['net_p'][perp_market_inspect] if v > 0 and row['net_p'][0] > 0 else 0),

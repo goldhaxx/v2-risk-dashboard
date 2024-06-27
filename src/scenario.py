@@ -94,6 +94,7 @@ async def get_usermap_df(_drift_client: DriftClient, user_map: UserMap, mode: st
         'spot_asset': x.get_spot_market_asset_value(None, margin_category) / QUOTE_PRECISION,
         'spot_liability': x.get_spot_market_liability_value(None, margin_category) / QUOTE_PRECISION,
         'upnl': x.get_unrealized_pnl(True) / QUOTE_PRECISION,
+        'net_usd_value': (x.get_net_spot_market_value(None) +  x.get_unrealized_pnl(True)) / QUOTE_PRECISION,
         # 'funding_upnl': x.get_unrealized_funding_pnl() / QUOTE_PRECISION,
         # 'total_collateral': x.get_total_collateral(margin_category or MarginCategory.INITIAL) / QUOTE_PRECISION,
         # 'margin_req': x.get_margin_requirement(margin_category or MarginCategory.INITIAL) / QUOTE_PRECISION,
@@ -114,7 +115,7 @@ async def get_usermap_df(_drift_client: DriftClient, user_map: UserMap, mode: st
         # 'total_social_loss': user_account.total_social_loss,
         # 'unsettled_pnl_perp_x': x.get_unrealized_pnl(True, market_index=24) / QUOTE_PRECISION,
         }
-        levs0['net_usd_value'] = levs0['spot_asset'] + levs0['upnl'] - levs0['spot_liability']
+        # levs0['net_usd_value'] = levs0['spot_asset'] + levs0['upnl'] - levs0['spot_liability']
 
         if all_fields:
             levs0['net_v'] = get_collateral_composition(x, margin_category, spot_n)
