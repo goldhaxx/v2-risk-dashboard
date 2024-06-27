@@ -39,7 +39,7 @@ def get_largest_perp_positions(vat: Vat):
                 if market_price is not None:
                     market_price_ui = market_price.price / PRICE_PRECISION
                     base_asset_value = (
-                        position.base_asset_amount / BASE_PRECISION
+                        abs(position.base_asset_amount) / BASE_PRECISION
                     ) * market_price_ui
                     heap_item = (
                         to_financial(base_asset_value),
@@ -209,7 +209,7 @@ def get_most_levered_perp_positions_above_1m(vat: Vat):
                     if market_price is not None:
                         market_price_ui = market_price.price / PRICE_PRECISION
                         base_asset_value = (
-                            position.base_asset_amount / BASE_PRECISION
+                            abs(position.base_asset_amount) / BASE_PRECISION
                         ) * market_price_ui
                         leverage = base_asset_value / total_collateral
                         if base_asset_value > 1_000_000:

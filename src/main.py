@@ -31,9 +31,24 @@ from utils import load_newest_files, load_vat, to_financial
 from sections.asset_liab_matrix import asset_liab_matrix_page
 from sections.ob import ob_cmp_page
 from sections.scenario import plot_page
-
+from sections.liquidation_curves import plot_liquidation_curve
 
 from health_utils import *
+
+@st.cache(allow_output_mutation=True)
+def cached_load_vat(dc: DriftClient):
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    newest_snapshot = load_newest_files(os.getcwd() + "/pickles")
+    vat = loop.run_until_complete(load_vat(dc, newest_snapshot))
+    loop.close()
+    return vat
+
+def get_vat(dc: DriftClient):
+    start_load_vat = time.time()
+    vat = cached_load_vat(dc)
+    print(f"loaded vat in {time.time() - start_load_vat}")
+    return vat
 
 def main():
     st.set_page_config(layout="wide")
@@ -48,7 +63,7 @@ def main():
     def query_string_callback():
         st.query_params['tab'] = st.session_state.query_key
     query_tab = st.query_params.get('tab', ['Welcome'])[0]
-    tab_options = ('Welcome', 'Health', 'Price-Shock', 'Asset-Liab-Matrix', 'Orderbook')
+    tab_options = ('Welcome', 'Health', 'Price-Shock', 'Asset-Liab-Matrix', 'Orderbook', 'Liquidations')
     for idx, x in enumerate(tab_options):
         if x.lower() == query_tab.lower():
             query_index = idx
@@ -70,9 +85,9 @@ def main():
             account_subscription=AccountSubscriptionConfig("cached"),
         )
 
-        if tab.lower() in ['health', 'price-shock', 'asset-liab-matrix']:
+        loop: AbstractEventLoop = asyncio.new_event_loop()
+        if tab.lower() in ['health', 'price-shock', 'asset-liab-matrix', 'liquidations'] and 'vat' not in st.session_state:
             # start_sub = time.time()
-            loop: AbstractEventLoop = asyncio.new_event_loop()
             # loop.run_until_complete(dc.subscribe())
             # print(f"subscribed in {time.time() - start_sub}")
 
@@ -80,8 +95,10 @@ def main():
 
             start_load_vat = time.time()
             vat = loop.run_until_complete(load_vat(drift_client, newest_snapshot))
+            st.session_state["vat"] = vat
             print(f"loaded vat in {time.time() - start_load_vat}")
-
+        elif tab.lower() in ['health', 'price-shock', 'asset-liab-matrix', 'liquidations']:
+            vat = st.session_state["vat"]
 
         if tab.lower() == 'health':
             health_distribution = get_account_health_distribution(vat)
@@ -113,5 +130,7 @@ def main():
             asset_liab_matrix_page(loop, vat, drift_client)
         elif tab.lower() == 'orderbook':
             ob_cmp_page()
+        elif tab.lower() == 'liquidations':
+            plot_liquidation_curve(vat)
 
 main()

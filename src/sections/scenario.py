@@ -15,37 +15,35 @@ from driftpy.pickle.vat import Vat
 
 from scenario import get_usermap_df
 
+def price_shock_plot(price_scenario_users: list[Any], oracle_distort: float):
+    levs = price_scenario_users
+    dfs = [pd.DataFrame(levs[2][i]) for i in range(len(levs[2]))] \
+    + [pd.DataFrame(levs[0])] \
+    + [pd.DataFrame(levs[1][i]) for i in range(len(levs[1]))]
+    
+    spot_bankrs = []
+    for df in dfs:
+        spot_b_t1 = -(df[(df['spot_asset']<df['spot_liability']) & (df['net_usd_value']<0)])
+        spot_bankrs.append(-(spot_b_t1['spot_liability'] - spot_b_t1['spot_asset']).sum())
+
+    xdf = [[-df[df['net_usd_value']<0]['net_usd_value'].sum() for df in dfs],
+            spot_bankrs
+        ]
+    toplt_fig = pd.DataFrame(xdf, 
+                                index=['bankruptcy', 'spot bankrupt'],
+                                columns=[oracle_distort*(i+1)*-100 for i in range(len(levs[2]))]\
+                                +[0]\
+                                +[oracle_distort*(i+1)*100 for i in range(len(levs[1]))]).T
+    toplt_fig['perp bankrupt'] = toplt_fig['bankruptcy'] - toplt_fig['spot bankrupt']
+    toplt_fig = toplt_fig.sort_index()
+    toplt_fig = toplt_fig.plot()
+        # Customize the layout if needed
+    toplt_fig.update_layout(title='Bankruptcies in crypto price scenarios',
+                    xaxis_title='Oracle Move (%)',
+                    yaxis_title='Bankruptcy ($)')
+    st.plotly_chart(toplt_fig)
+
 def plot_page(loop: AbstractEventLoop, vat: Vat, drift_client: DriftClient):
-
-    def price_shock_plot(price_scenario_users: list[Any], oracle_distort: float):
-        levs = price_scenario_users
-        dfs = [pd.DataFrame(levs[2][i]) for i in range(len(levs[2]))] \
-        + [pd.DataFrame(levs[0])] \
-        + [pd.DataFrame(levs[1][i]) for i in range(len(levs[1]))]
-        
-        spot_bankrs = []
-        for df in dfs:
-            spot_b_t1 = -(df[(df['spot_asset']<df['spot_liability']) & (df['net_usd_value']<0)])
-            spot_bankrs.append(-(spot_b_t1['spot_liability'] - spot_b_t1['spot_asset']).sum())
-
-        xdf = [[-df[df['net_usd_value']<0]['net_usd_value'].sum() for df in dfs],
-                spot_bankrs
-            ]
-        toplt_fig = pd.DataFrame(xdf, 
-                                    index=['bankruptcy', 'spot bankrupt'],
-                                    columns=[oracle_distort*(i+1)*-100 for i in range(len(levs[2]))]\
-                                    +[0]\
-                                    +[oracle_distort*(i+1)*100 for i in range(len(levs[1]))]).T
-        toplt_fig['perp bankrupt'] = toplt_fig['bankruptcy'] - toplt_fig['spot bankrupt']
-        toplt_fig = toplt_fig.sort_index()
-        toplt_fig = toplt_fig.plot()
-            # Customize the layout if needed
-        toplt_fig.update_layout(title='Bankruptcies in crypto price scenarios',
-                        xaxis_title='Oracle Move (%)',
-                        yaxis_title='Bankruptcy ($)')
-        st.plotly_chart(toplt_fig)
-            
-
     cov_col, distort_col = st.columns(2)
     cov = cov_col.selectbox('covariance:', ['ignore stables', 
                                         'sol + lst only',
@@ -81,4 +79,6 @@ def plot_page(loop: AbstractEventLoop, vat: Vat, drift_client: DriftClient):
 
     with st.expander('distorted oracle keys'):
         st.write(distorted_oracles)
+
+    
 

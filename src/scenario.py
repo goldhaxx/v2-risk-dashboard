@@ -41,9 +41,10 @@ from driftpy.market_map.market_map_config import WebsocketConfig
 from driftpy.user_map.user_map import UserMap, UserMapConfig, PollingConfig
 import datetime
 import csv
+from utils import get_init_health
 
-NUMBER_OF_SPOT = 18
-NUMBER_OF_PERP = 32
+NUMBER_OF_SPOT = 20
+NUMBER_OF_PERP = 33
 
 def comb_asset_liab(a_l_tup):
     return a_l_tup[0] - a_l_tup[1]
@@ -78,10 +79,17 @@ async def get_usermap_df(_drift_client: DriftClient, user_map: UserMap, mode: st
         if oracle_cache is not None:
             x.drift_client.account_subscriber.cache = oracle_cache
 
+        if margin_category == MarginCategory.INITIAL:
+            health_func = lambda x: get_init_health(x)
+        else:
+            health_func = lambda x: x.get_health()
+
         # user_account = x.get_user_account()
         levs0 = {
         # 'tokens': [x.get_token_amount(i) for i in range(spot_n)],
-        # 'leverage': x.get_leverage() / MARGIN_PRECISION, 
+        'user_key': x.user_public_key,
+        'leverage': x.get_leverage() / MARGIN_PRECISION, 
+        'health': health_func(x),
         'perp_liability': x.get_perp_market_liability(None, margin_category) / QUOTE_PRECISION,
         'spot_asset': x.get_spot_market_asset_value(None, margin_category) / QUOTE_PRECISION,
         'spot_liability': x.get_spot_market_liability_value(None, margin_category) / QUOTE_PRECISION,
@@ -142,7 +150,6 @@ async def get_usermap_df(_drift_client: DriftClient, user_map: UserMap, mode: st
         levs_none = list(do_dict(x, None) for x in user_vals)
         levs_init = list(do_dict(x, MarginCategory.INITIAL) for x in user_vals)
         levs_maint = list(do_dict(x, MarginCategory.MAINTENANCE) for x in user_vals)
-        # print(levs_none[0].keys(), levs_init[0].keys(), levs_maint[0].keys())
         return (levs_none, levs_init, levs_maint), user_keys
     else:
         num_entrs = n_scenarios # increment to get more steps
@@ -155,21 +162,6 @@ async def get_usermap_df(_drift_client: DriftClient, user_map: UserMap, mode: st
 
 
         assert(len(new_oracles_dat_down) == num_entrs)
-        # await _drift_client.account_subscriber.update_cache()
-
-        # cache_ff = 'drift_client_cache.pickle'
-        # if os.path.exists(cache_ff):
-        #     st.write('loading cache from:', cache_ff)
-        #     with open('filename.pickle', 'rb') as handle:
-        #         filecache = pickle.load(handle)
-        #         _drift_client.account_subscriber.cache = filecache
-
-        # else:
-        #     st.write('loading cache')
-        #     await _drift_client.account_subscriber.update_cache()
-        #     with open(cache_ff, 'wb') as handle:
-        #         pickle.dump(_drift_client.account_subscriber.cache, handle, protocol=pickle.HIGHEST_PROTOCOL)
-
         print('skipped oracles:', skipped_oracles)
         distorted_oracles = []
         cache_up = copy.deepcopy(_drift_client.account_subscriber.cache)
@@ -181,13 +173,12 @@ async def get_usermap_df(_drift_client: DriftClient, user_map: UserMap, mode: st
             if cov_matrix is not None and key in skipped_oracles:
                 continue
             if only_one_index is None or only_one_index_key == key:
-                # print('distoring oracle:', key)
                 distorted_oracles.append(key)
                 for i in range(num_entrs):
                     oracle_distort_up = max(1 + oracle_distor * (i+1), 1)
                     oracle_distort_down = max(1 - oracle_distor * (i+1), 0)
 
-                    #weird pickle artifact
+                    # weird pickle artifact
                     if isinstance(new_oracles_dat_up[i][key], OraclePriceData):
                         new_oracles_dat_up[i][key].price *= oracle_distort_up
                         new_oracles_dat_down[i][key].price *= oracle_distort_down
@@ -200,7 +191,6 @@ async def get_usermap_df(_drift_client: DriftClient, user_map: UserMap, mode: st
         levs_down = []
 
         for i in range(num_entrs):
-            # print(new_oracles_dat_up[i])
             cache_up['oracle_price_data'] = new_oracles_dat_up[i]
             cache_down['oracle_price_data'] = new_oracles_dat_down[i]
             levs_up_i = list(do_dict(x, None, cache_up) for x in user_vals)
@@ -208,7 +198,6 @@ async def get_usermap_df(_drift_client: DriftClient, user_map: UserMap, mode: st
             levs_up.append(levs_up_i)
             levs_down.append(levs_down_i)
 
-        # print(levs_none[0].keys(), levs_init[0].keys(), levs_maint[0].keys())
         return (levs_none, tuple(levs_up), tuple(levs_down)), user_keys, distorted_oracles
 
 
