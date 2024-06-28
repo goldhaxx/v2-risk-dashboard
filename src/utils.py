@@ -22,21 +22,23 @@ from driftpy.types import MarketType
 from driftpy.drift_user import DriftUser
 from driftpy.math.margin import MarginCategory
 
+
 def get_init_health(user: DriftUser):
-        if user.is_being_liquidated():
-            return 0
+    if user.is_being_liquidated():
+        return 0
 
-        total_collateral = user.get_total_collateral(MarginCategory.INITIAL)
-        maintenance_margin_req = user.get_margin_requirement(MarginCategory.INITIAL)
+    total_collateral = user.get_total_collateral(MarginCategory.INITIAL)
+    maintenance_margin_req = user.get_margin_requirement(MarginCategory.INITIAL)
 
-        if maintenance_margin_req == 0 and total_collateral >= 0:
-            return 100
-        elif total_collateral <= 0:
-            return 0
-        else:
-            return round(
-                min(100, max(0, (1 - maintenance_margin_req / total_collateral) * 100))
-            )
+    if maintenance_margin_req == 0 and total_collateral >= 0:
+        return 100
+    elif total_collateral <= 0:
+        return 0
+    else:
+        return round(
+            min(100, max(0, (1 - maintenance_margin_req / total_collateral) * 100))
+        )
+
 
 def to_financial(num):
     num_str = str(num)
