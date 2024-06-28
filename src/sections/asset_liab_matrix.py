@@ -44,16 +44,6 @@ def get_matrix(
     if mode == 3:
         levs_init = [x for x in levs_init if int(x["health"]) <= int(health)]
 
-    # if "margin" not in st.session_state:
-    #     (levs_none, levs_init, levs_maint), user_keys =  loop.run_until_complete(get_usermap_df(drift_client, vat.users,
-    #                                                                 'margins', oracle_distort,
-    #                                                                 None, 'ignore stables', n_scenarios=0, all_fields=True))
-    # levs_maint = [x for x in levs_maint if int(x['health']) <= 10]
-    # levs_init = [x for x in levs_init if int(x['health']) <= 10]
-    #     st.session_state["margin"] = (levs_none, levs_init, levs_maint), user_keys
-    # else:
-    #     (levs_none, levs_init, levs_maint), user_keys = st.session_state["margin"]
-
     df: pd.DataFrame
     match mode:
         case 0:  # nothing
@@ -72,7 +62,7 @@ def get_matrix(
             (
                 "all_assets",
                 lambda v: v if v > 0 else 0,
-            ),  # Simplified from v / row['spot_asset'] * row['spot_asset']
+            ),
             (
                 "all",
                 lambda v: v
@@ -121,7 +111,7 @@ def get_matrix(
 
     def format_with_checkmark(value, condition, mode, financial=False):
         if financial:
-            formatted_value = f"{value:,.2f}"
+            formatted_value = f"${value:,.2f}"
         else:
             formatted_value = f"{value:.2f}"
 
@@ -210,9 +200,22 @@ def asset_liab_matrix_page(
         disabled=slider_disabled,
     )
 
-    res, df = get_matrix(
-        loop, vat, drift_client, env, mode, perp_market_inspect, health
-    )
+    if mode not in [1, 2]:
+        if "margin" not in st.session_state:
+            st.session_state["margin"] = get_matrix(loop, vat, drift_client)
+            res = st.session_state["margin"][0]
+            df = st.session_state["margin"][1]
+        else:
+            res = st.session_state["margin"][0]
+            df = st.session_state["margin"][1]
+    else:
+        import time
+
+        start = time.time()
+        res, df = get_matrix(
+            loop, vat, drift_client, env, mode, perp_market_inspect, health
+        )
+        st.write(f"matrix in {time.time() - start:.2f} seconds")
 
     st.write(f"{df.shape[0]} users for scenario")
 
