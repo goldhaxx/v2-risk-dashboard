@@ -3,9 +3,9 @@ from typing import Iterator
 from driftpy.pickle.vat import Vat
 
 import streamlit as st
-import pandas as pd
+import pandas as pd  # type: ignore
 
-from sections.asset_liab_matrix import get_matrix, NUMBER_OF_SPOT
+from sections.asset_liab_matrix import get_matrix, NUMBER_OF_SPOT  # type: ignore
 from driftpy.market_map.market_map import SpotMarketAccount
 from driftpy.accounts.types import DataAndSlot
 from driftpy.constants.numeric_constants import (
@@ -25,13 +25,6 @@ def custom_divide(row, col1, col2):
         return smaller / larger
     else:
         return None
-
-
-def notional(dc: DriftClient, row):
-    market_index = row.name
-    size = row["deposit_balance"]
-    price = dc.get_oracle_price_data_for_spot_market(market_index).price / PRICE_PRECISION  # type: ignore
-    return price * size
 
 
 spot_fields = [
@@ -72,7 +65,7 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
 
     vat: Vat = st.session_state["vat"]
 
-    spot_df = get_spot_df(vat.spot_markets.values(), dc)
+    spot_df = get_spot_df(vat.spot_markets.values(), vat)
 
     stable_df = spot_df[spot_df.index.isin(stables)]
 
@@ -84,9 +77,9 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
         total_stable_borrows_notional / total_stable_deposits_notional
     )
     total_margin_available = spot_df["scale_initial_asset_weight_start"].sum()
-    numerator = max(total_deposits, total_margin_available)
-    denominator = min(total_deposits, total_margin_available)
-    maximum_exchange_leverage = numerator / denominator
+    # numerator = max(total_deposits, total_margin_available)
+    # denominator = min(total_deposits, total_margin_available)
+    maximum_exchange_leverage = total_margin_available / total_deposits
 
     with col1:
         st.markdown(
@@ -118,24 +111,26 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
 
     spot_df.insert(3, "all_liabilities", spot_df.pop("all_liabilities"))
 
-    spot_df["perp_leverage"] = spot_df.apply(
-        lambda row: custom_divide(row, "deposit_balance", "all_liabilities"), axis=1
-    )
+    # spot_df["perp_leverage"] = spot_df.apply(
+    #     lambda row: custom_divide(row, "deposit_balance", "all_liabilities"), axis=1
+    # )
+
+    spot_df["perp_leverage"] = spot_df["all_liabilities"] / spot_df["deposit_balance"]
 
     spot_df.insert(6, "perp_leverage", spot_df.pop("perp_leverage"))
 
     spot_df.rename(columns={"leverage": "actual_utilization"}, inplace=True)
 
-    spot_df.insert(9, "max_token_deposits", spot_df.pop("max_token_deposits"))
+    # spot_df.insert(9, "max_token_deposits", spot_df.pop("max_token_deposits"))
     spot_df.insert(4, "optimal_utilization", spot_df.pop("optimal_utilization"))
     total_margin_utilized_notional = sum(
         margin_df[f"spot_{i}_all"].sum() for i in range(NUMBER_OF_SPOT)
     )
     total_margin_utilized = total_margin_utilized_notional / total_margin_available
 
-    numerator = max(total_margin_utilized_notional, total_deposits)
-    denominator = min(total_margin_utilized_notional, total_deposits)
-    actual_exchange_leverage = numerator / denominator
+    # numerator = max(total_margin_utilized_notional, total_deposits)
+    # denominator = min(total_margin_utilized_notional, total_deposits)
+    actual_exchange_leverage = total_margin_utilized_notional / total_deposits
 
     with col2:
         st.markdown(
@@ -175,7 +170,7 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
     st.dataframe(display_formatted_df(filtered_df))
 
 
-def get_spot_df(accounts: Iterator[DataAndSlot[SpotMarketAccount]], dc: DriftClient):
+def get_spot_df(accounts: Iterator[DataAndSlot[SpotMarketAccount]], vat: Vat):
     transformations = {
         "deposit_balance": lambda x: x / SPOT_BALANCE_PRECISION,
         "borrow_balance": lambda x: x / SPOT_BALANCE_PRECISION,
@@ -203,15 +198,22 @@ def get_spot_df(accounts: Iterator[DataAndSlot[SpotMarketAccount]], dc: DriftCli
         if column in df.columns:
             df[column] = df[column].apply(transformation)
 
-    df["leverage"] = df.apply(
-        lambda row: custom_divide(row, "borrow_balance", "deposit_balance"), axis=1
-    )
+    df["leverage"] = df["borrow_balance"] / df["deposit_balance"]
+    # df.apply(
+    #     lambda row: custom_divide(row, "borrow_balance", "deposit_balance"), axis=1
+    # )
 
     df["symbol"] = df.index.map(lambda idx: mainnet_spot_market_configs[idx].symbol)
 
+    def notional(row, balance_type):
+        market_price = vat.spot_oracles.get(row.name).price / PRICE_PRECISION  # type: ignore
+        size = row[balance_type]
+        notional_value = size * market_price
+        return notional_value
+
     # TODO BROKEN
-    # df["deposit_balance"].apply(notional, axis=1, args=(dc,))
-    # df["borrow_balance"].apply(notional, axis=1, args=(dc,))
+    df["deposit_balance"] = df.apply(notional, balance_type="deposit_balance", axis=1)
+    df["borrow_balance"] = df.apply(notional, balance_type="borrow_balance", axis=1)
 
     df.insert(0, "symbol", df.pop("symbol"))
     df.insert(1, "deposit_balance", df.pop("deposit_balance"))

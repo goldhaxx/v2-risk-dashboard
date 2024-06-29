@@ -70,12 +70,6 @@ def setup_context(dc: DriftClient, loop: AbstractEventLoop):
 def main():
     st.set_page_config(layout="wide")
 
-    url = os.getenv("RPC_URL", "🤫")
-    # env = st.sidebar.radio("env", ("mainnet-beta", "devnet"))
-    # rpc = st.sidebar.text_input("RPC URL", value=url)
-    # if env == "mainnet-beta" and (rpc == "🤫" or rpc == ""):
-    #     rpc = os.environ["ANCHOR_PROVIDER_URL"]
-
     query_index = 0
 
     def query_string_callback():

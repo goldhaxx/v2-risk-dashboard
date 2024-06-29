@@ -8,8 +8,8 @@ from driftpy.pickle.vat import Vat
 from driftpy.constants.spot_markets import mainnet_spot_market_configs
 from driftpy.constants.perp_markets import mainnet_perp_market_configs
 
-from scenario import get_usermap_df, NUMBER_OF_SPOT, NUMBER_OF_PERP  # type: ignore
-from cache import get_cached_asset_liab_dfs
+from scenario import NUMBER_OF_SPOT  # type: ignore
+from cache import get_cached_asset_liab_dfs  # type: ignore
 
 options = [0, 1, 2, 3]
 labels = [
