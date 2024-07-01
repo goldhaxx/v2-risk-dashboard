@@ -17,15 +17,7 @@ from driftpy.constants.numeric_constants import (
 from driftpy.drift_client import DriftClient
 from driftpy.constants.spot_markets import mainnet_spot_market_configs
 
-
-def custom_divide(row, col1, col2):
-    larger = max(row[col1], row[col2])
-    smaller = min(row[col1], row[col2])
-    if larger != 0:
-        return smaller / larger
-    else:
-        return None
-
+from sections.liquidation_curves import get_liquidation_curve, get_liquidation_list
 
 spot_fields = [
     "deposit_balance",
@@ -111,25 +103,18 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
 
     spot_df.insert(3, "all_liabilities", spot_df.pop("all_liabilities"))
 
-    # spot_df["perp_leverage"] = spot_df.apply(
-    #     lambda row: custom_divide(row, "deposit_balance", "all_liabilities"), axis=1
-    # )
-
     spot_df["perp_leverage"] = spot_df["all_liabilities"] / spot_df["deposit_balance"]
 
     spot_df.insert(6, "perp_leverage", spot_df.pop("perp_leverage"))
 
     spot_df.rename(columns={"leverage": "actual_utilization"}, inplace=True)
 
-    # spot_df.insert(9, "max_token_deposits", spot_df.pop("max_token_deposits"))
     spot_df.insert(4, "optimal_utilization", spot_df.pop("optimal_utilization"))
     total_margin_utilized_notional = sum(
         margin_df[f"spot_{i}_all"].sum() for i in range(NUMBER_OF_SPOT)
     )
     total_margin_utilized = total_margin_utilized_notional / total_margin_available
 
-    # numerator = max(total_margin_utilized_notional, total_deposits)
-    # denominator = min(total_margin_utilized_notional, total_deposits)
     actual_exchange_leverage = total_margin_utilized_notional / total_deposits
 
     with col2:
@@ -158,16 +143,60 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
 
     st.markdown("#### Spot Markets ####")
 
+    col1, col2 = st.columns([1, 1])
+
     default_index = list(index_options.keys()).index("All")
-    selected_option = st.selectbox(
-        "Select Markets", options=list(index_options.keys()), index=default_index
-    )
+    with col1:
+        selected_option = st.selectbox(
+            "Select Markets", options=list(index_options.keys()), index=default_index
+        )
+
+    with col2:
+        oracle_liquidation_offset = st.text_input("Oracle Liquidation Offset (%)", 50)
+
+        def apply_liquidations(row, vat, oracle_liquidation_offset):
+            long_liq, short_liq = get_liquidations_offset_from_oracle(
+                row, vat, oracle_liquidation_offset
+            )
+            return pd.Series(
+                {"long_liq_notional": long_liq, "short_liq_notional": short_liq}
+            )
+
+        spot_df[["long_liq_notional", "short_liq_notional"]] = spot_df.apply(
+            lambda row: apply_liquidations(row, vat, int(oracle_liquidation_offset)),
+            axis=1,
+        )
+
+        spot_df.insert(6, "long_liq_notional", spot_df.pop("long_liq_notional"))
+        spot_df.insert(7, "short_liq_notional", spot_df.pop("short_liq_notional"))
 
     selected_indexes = index_options[selected_option]  # type: ignore
 
     filtered_df = spot_df.loc[spot_df.index.isin(selected_indexes)]
 
     st.dataframe(display_formatted_df(filtered_df))
+
+
+def get_liquidations_offset_from_oracle(row, vat, oracle_liquidation_offset: int):
+    market_index = row.name
+    liquidations_long, liquidations_short, oracle_price = get_liquidation_list(
+        vat, int(market_index), True
+    )
+
+    def get_liqs(liqs):
+        liq_notional = 0
+        for liq_price, notional, _ in liqs:
+            diff = abs(liq_price - oracle_price)
+            threshold = liq_price * (oracle_liquidation_offset / 100)
+            if diff < threshold:
+                liq_notional += notional
+
+        return liq_notional
+
+    long_liq_notional = get_liqs(liquidations_long)
+    short_liq_notional = get_liqs(liquidations_short)
+
+    return (long_liq_notional, short_liq_notional)
 
 
 def get_spot_df(accounts: Iterator[DataAndSlot[SpotMarketAccount]], vat: Vat):
@@ -199,9 +228,6 @@ def get_spot_df(accounts: Iterator[DataAndSlot[SpotMarketAccount]], vat: Vat):
             df[column] = df[column].apply(transformation)
 
     df["leverage"] = df["borrow_balance"] / df["deposit_balance"]
-    # df.apply(
-    #     lambda row: custom_divide(row, "borrow_balance", "deposit_balance"), axis=1
-    # )
 
     df["symbol"] = df.index.map(lambda idx: mainnet_spot_market_configs[idx].symbol)
 
@@ -211,7 +237,6 @@ def get_spot_df(accounts: Iterator[DataAndSlot[SpotMarketAccount]], vat: Vat):
         notional_value = size * market_price
         return notional_value
 
-    # TODO BROKEN
     df["deposit_balance"] = df.apply(notional, balance_type="deposit_balance", axis=1)
     df["borrow_balance"] = df.apply(notional, balance_type="borrow_balance", axis=1)
 
@@ -246,6 +271,8 @@ def display_formatted_df(df):
         "market_index": "{:}",
         "scale_initial_asset_weight_start": "${:,.2f}",
         "perp_leverage": "{:.2f}",
+        "short_liq_notional": "${:,.2f}",
+        "long_liq_notional": "${:,.2f}",
     }
 
     styled_df = df.style.format(format_dict)
