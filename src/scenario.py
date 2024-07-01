@@ -33,7 +33,11 @@ import os
 import json
 import streamlit as st
 from driftpy.constants.spot_markets import devnet_spot_market_configs, SpotMarketConfig
-from driftpy.constants.perp_markets import devnet_perp_market_configs, PerpMarketConfig
+from driftpy.constants.perp_markets import (
+    devnet_perp_market_configs,
+    PerpMarketConfig,
+    mainnet_perp_market_configs,
+)
 from dataclasses import dataclass
 from solders.pubkey import Pubkey
 
@@ -51,8 +55,8 @@ import datetime
 import csv
 from utils import get_init_health
 
-NUMBER_OF_SPOT = 20
-NUMBER_OF_PERP = 33
+NUMBER_OF_SPOT = len(mainnet_spot_market_configs)
+NUMBER_OF_PERP = len(mainnet_perp_market_configs)
 
 
 def comb_asset_liab(a_l_tup):

@@ -87,11 +87,9 @@ def get_liquidation_curve(vat: Vat, market_index: int, use_liq_buffer=False):
         vat, market_index, use_liq_buffer
     )
 
-    # for (price, size) in liquidations_long:
-    #     print(f"Long liquidation for {size} @ {price}")
-
-    # for (price, size) in liquidations_short:
-    #     print(f"Short liquidation for {size} @ {price}")
+    print(len(liquidations_long))
+    print(len(liquidations_short))
+    print(market_price_ui)
 
     return plot_liquidation_curves(
         liquidations_long, liquidations_short, market_price_ui
@@ -211,11 +209,11 @@ def plot_liquidation_curve(vat: Vat):
     (long_fig, short_fig), (
         liquidations_long,
         liquidations_short,
-    ) = get_liquidation_curve(vat, market_index, True)
+    ) = get_liquidation_curve(vat, int(market_index), True)
     (long_fig2, short_fig2), (
         liquidations_long2,
         liquidations_short2,
-    ) = get_liquidation_curve(vat, market_index, False)
+    ) = get_liquidation_curve(vat, int(market_index), False)
 
     long_col, short_col = st.columns([1, 1])
 
