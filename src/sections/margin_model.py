@@ -17,7 +17,7 @@ from driftpy.constants.numeric_constants import (
 from driftpy.drift_client import DriftClient
 from driftpy.constants.spot_markets import mainnet_spot_market_configs
 
-from sections.liquidation_curves import get_liquidation_curve, get_liquidation_list
+from sections.liquidation_curves import get_liquidation_list  # type: ignore
 
 spot_fields = [
     "deposit_balance",
@@ -33,9 +33,23 @@ spot_fields = [
     "scale_initial_asset_weight_start",
 ]
 
+margin_scalars = {
+    "USDC": 1.3,
+    "USDT": 1.3,
+    "SOL": 1.1,
+    "mSOL": 1.1,
+    "jitoSOL": 1.1,
+    "bSOL": 1.1,
+    "INF": 1.1,
+    "dSOL": 1.1,
+}
+
+DEFAULT_MARGIN_SCALAR = 0.5
+
 stables = [0, 5, 18]
 sol_and_lst = [1, 2, 6, 8, 16, 17]
 sol_eco = [7, 9, 11, 12, 13, 14, 15, 19]
+wrapped = [3, 4]
 
 spot_market_indexes = [market.market_index for market in mainnet_spot_market_configs]
 
@@ -44,6 +58,7 @@ index_options["All"] = spot_market_indexes
 index_options["Stables"] = stables
 index_options["Solana and LST"] = sol_and_lst
 index_options["Solana Ecosystem"] = sol_eco
+index_options["Wrapped"] = wrapped
 index_options.update(
     {market.symbol: [market.market_index] for market in mainnet_spot_market_configs}
 )
@@ -68,9 +83,7 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
     total_stable_utilization = (
         total_stable_borrows_notional / total_stable_deposits_notional
     )
-    total_margin_available = spot_df["scale_initial_asset_weight_start"].sum()
-    # numerator = max(total_deposits, total_margin_available)
-    # denominator = min(total_deposits, total_margin_available)
+    total_margin_available = spot_df["max_margin_extended"].sum()
     maximum_exchange_leverage = total_margin_available / total_deposits
 
     with col1:
@@ -141,7 +154,7 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
             f"##### Actual Exchange Leverage: `{actual_exchange_leverage:,.2f}` #####"
         )
 
-    st.markdown("#### Spot Markets ####")
+    st.markdown("#### Spot Market Overview ####")
 
     col1, col2 = st.columns([1, 1])
 
@@ -154,27 +167,69 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
     with col2:
         oracle_liquidation_offset = st.text_input("Oracle Liquidation Offset (%)", 50)
 
-        def apply_liquidations(row, vat, oracle_liquidation_offset):
-            long_liq, short_liq = get_liquidations_offset_from_oracle(
-                row, vat, oracle_liquidation_offset
-            )
-            return pd.Series(
-                {"long_liq_notional": long_liq, "short_liq_notional": short_liq}
-            )
+        # def apply_liquidations(row, vat, oracle_liquidation_offset):
+        #     long_liq, short_liq = get_liquidations_offset_from_oracle(
+        #         row, vat, oracle_liquidation_offset
+        #     )
+        #     return pd.Series(
+        #         {"long_liq_notional": long_liq, "short_liq_notional": short_liq}
+        #     )
 
-        spot_df[["long_liq_notional", "short_liq_notional"]] = spot_df.apply(
-            lambda row: apply_liquidations(row, vat, int(oracle_liquidation_offset)),
-            axis=1,
-        )
+        # spot_df[["long_liq_notional", "short_liq_notional"]] = spot_df.apply(
+        #     lambda row: apply_liquidations(row, vat, int(oracle_liquidation_offset)), # type: ignore
+        #     axis=1,
+        # )
 
-        spot_df.insert(6, "long_liq_notional", spot_df.pop("long_liq_notional"))
-        spot_df.insert(7, "short_liq_notional", spot_df.pop("short_liq_notional"))
+        # spot_df.insert(6, "long_liq_notional", spot_df.pop("long_liq_notional"))
+        # spot_df.insert(7, "short_liq_notional", spot_df.pop("short_liq_notional"))
 
     selected_indexes = index_options[selected_option]  # type: ignore
 
     filtered_df = spot_df.loc[spot_df.index.isin(selected_indexes)]
 
     st.dataframe(display_formatted_df(filtered_df))
+
+    st.markdown("#### Spot Market Analysis ####")
+
+    index_options_list = list(index_options.values())
+
+    all_analytics_df = get_analytics_df(index_options_list[0], spot_df)
+
+    total_margin_available = all_analytics_df["target_margin_extended"].sum()
+
+    st.markdown(
+        f"##### Total Theoretical Margin Extended: `${total_margin_available:,.2f}` #####"
+    )
+
+    tabs = st.tabs(list(index_options.keys()))
+
+    for idx, tab in enumerate(tabs):
+        with tab:
+            analytics_df = get_analytics_df(index_options_list[idx], spot_df)
+            st.dataframe(display_formatted_df(analytics_df))
+
+
+def get_analytics_df(market_indexes: list[int], spot_df: pd.DataFrame):
+    analytics_df = pd.DataFrame()
+    analytics_df.index = spot_df.index
+    columns = [
+        "symbol",
+        "deposit_balance",
+        "borrow_balance",
+        "all_liabilities",
+        "perp_leverage",
+        "max_margin_extended",
+    ]
+    analytics_df[columns] = spot_df[columns]
+
+    def get_margin_scalar(symbol):
+        return margin_scalars.get(symbol, DEFAULT_MARGIN_SCALAR)
+
+    analytics_df["target_margin_extended"] = (
+        (1 / analytics_df["perp_leverage"]) * analytics_df["deposit_balance"]
+    ) * analytics_df["symbol"].map(get_margin_scalar)
+
+    return analytics_df.loc[analytics_df.index.isin(market_indexes)]
 
 
 def get_liquidations_offset_from_oracle(row, vat, oracle_liquidation_offset: int):
@@ -250,6 +305,10 @@ def get_spot_df(accounts: Iterator[DataAndSlot[SpotMarketAccount]], vat: Vat):
         df.pop("scale_initial_asset_weight_start"),
     )
 
+    df.rename(
+        columns={"scale_initial_asset_weight_start": "max_margin_extended"},
+        inplace=True,
+    )
     df = df.sort_index()
 
     return df
@@ -259,7 +318,7 @@ def display_formatted_df(df):
     format_dict = {
         "deposit_balance": "${:,.2f}",
         "borrow_balance": "${:,.2f}",
-        "all_liabilities": "${:,.2f}",
+        "perp_liabilities": "${:,.2f}",
         "initial_asset_weight": "{:.2%}",
         "maintenance_asset_weight": "{:.2%}",
         "initial_liability_weight": "{:.2%}",
@@ -269,11 +328,14 @@ def display_formatted_df(df):
         "optimal_borrow_rate": "{:.2%}",
         "max_borrow_rate": "{:.2%}",
         "market_index": "{:}",
-        "scale_initial_asset_weight_start": "${:,.2f}",
+        "max_margin_extended": "${:,.2f}",
         "perp_leverage": "{:.2f}",
-        "short_liq_notional": "${:,.2f}",
-        "long_liq_notional": "${:,.2f}",
+        "target_margin_extended": "${:,.2f}",
+        # "short_liq_notional": "${:,.2f}",
+        # "long_liq_notional": "${:,.2f}",
     }
+
+    df.rename(columns={"all_liabilities": "perp_liabilities"}, inplace=True)
 
     styled_df = df.style.format(format_dict)
 
