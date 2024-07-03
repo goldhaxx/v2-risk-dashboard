@@ -1,3 +1,6 @@
+import pandas as pd
+import numpy as np
+
 import os
 from typing import Optional
 
@@ -18,26 +21,40 @@ from driftpy.market_map.market_map_config import (
 )
 from driftpy.market_map.market_map import MarketMap
 
-from driftpy.types import MarketType
+from driftpy.types import MarketType, PerpPosition, PerpMarketAccount
 from driftpy.drift_user import DriftUser
 from driftpy.math.margin import MarginCategory
+from driftpy.constants.numeric_constants import (
+    PRICE_PRECISION,
+    MARGIN_PRECISION,
+    BASE_PRECISION,
+)
+from driftpy.math.margin import calculate_size_premium_liability_weight
+from scenario import (
+    NUMBER_OF_SPOT,
+    get_collateral_composition,
+    get_perp_liab_composition,
+    get_init_health,
+)
 
 
-def get_init_health(user: DriftUser):
-    if user.is_being_liquidated():
-        return 0
+def calculate_market_margin_ratio(
+    market: PerpMarketAccount, size, margin_category, custom_margin_ratio=0
+):
+    market_margin_ratio = (
+        market.margin_ratio_initial
+        if margin_category == MarginCategory.INITIAL
+        else market.margin_ratio_maintenance
+    )
 
-    total_collateral = user.get_total_collateral(MarginCategory.INITIAL)
-    maintenance_margin_req = user.get_margin_requirement(MarginCategory.INITIAL)
+    margin_ratio = max(
+        calculate_size_premium_liability_weight(
+            size, market.imf_factor, market_margin_ratio, MARGIN_PRECISION
+        ),
+        custom_margin_ratio,
+    )
 
-    if maintenance_margin_req == 0 and total_collateral >= 0:
-        return 100
-    elif total_collateral <= 0:
-        return 0
-    else:
-        return round(
-            min(100, max(0, (1 - maintenance_margin_req / total_collateral) * 100))
-        )
+    return margin_ratio
 
 
 def to_financial(num):
@@ -112,3 +129,78 @@ async def load_vat(dc: DriftClient, pickle_map: dict[str, str]) -> Vat:
     )
 
     return vat
+
+
+def aggregate_perps(vat: Vat):
+    print("aggregating perps")
+
+    def aggregate_perp(user: DriftUser) -> DriftUser:
+        agg_perp = PerpPosition(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+        sol_price = vat.perp_oracles.get(0).price
+        user_account = user.get_user_account()
+        sol_market = vat.perp_markets.get(0).data
+        for perp_position in user_account.perp_positions:
+            if perp_position.base_asset_amount == 0:
+                continue
+            print(perp_position.market_index)
+            asset_price = vat.perp_oracles.get(perp_position.market_index).price  # type: ignore
+            market = vat.perp_markets.get(perp_position.market_index)
+            sol_margin_ratio = calculate_market_margin_ratio(
+                sol_market, agg_perp.base_asset_amount, MarginCategory.INITIAL
+            )
+            margin_ratio = calculate_market_margin_ratio(
+                market.data, perp_position.base_asset_amount, MarginCategory.INITIAL
+            )
+            sol_margin_scalar = 1 / (sol_margin_ratio / MARGIN_PRECISION)
+            curr_margin_scalar = 1 / (margin_ratio / MARGIN_PRECISION)
+            exchange_rate = sol_price / asset_price
+            exchange_rate_normalized = exchange_rate / PRICE_PRECISION
+            new_baa = perp_position.base_asset_amount * exchange_rate_normalized
+            new_baa_adjusted = new_baa * (sol_margin_scalar / curr_margin_scalar)
+            print(
+                f"pos: {perp_position.base_asset_amount} orig: {new_baa} adjusted: {new_baa_adjusted} sol scalar: {sol_margin_scalar} curr scalar: {curr_margin_scalar} pos index: {perp_position.market_index}"
+            )
+            agg_perp.base_asset_amount += new_baa_adjusted
+            agg_perp.quote_asset_amount += perp_position.quote_asset_amount
+
+        if agg_perp.base_asset_amount == 0:
+            return None
+
+        user_account.perp_positions = [agg_perp]
+        ds = user.account_subscriber.user_and_slot
+        ds.data = user_account
+        user.account_subscriber.user_and_slot = ds
+        return user
+
+    users_list = list(vat.users.values())
+    import copy
+
+    copied = copy.deepcopy(users_list)
+    aggregated_users = [
+        user for user in (aggregate_perp(user) for user in copied) if user is not None
+    ]
+
+    for user in aggregated_users[:10]:
+        print(user.get_user_account())
+    # print(aggregated_users[:10])
+    user_keys = [user.user_public_key for user in vat.users.values()]
+
+    # def transform(user: DriftUser):
+    #     transforms = {
+    #         "user_key": user.user_public_key,
+    #         "net_v": get_collateral_composition(user, MarginCategory.INITIAL, NUMBER_OF_SPOT),
+    #         "net_p": get_perp_liab_composition(user, MarginCategory.INITIAL, NUMBER_OF_SPOT),
+    #     }
+
+    #     return transforms
+
+    # transformed_agg = [transform(user) for user in aggregated_users]
+
+    # for transformed in transformed_agg[:10]:
+    #     print(transformed)
+    # print(transformed_agg)
+
+    # df = pd.DataFrame(transformed_agg, index=user_keys)
+
+    def into_df(row):
+        pass

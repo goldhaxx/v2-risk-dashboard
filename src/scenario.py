@@ -53,7 +53,25 @@ from driftpy.market_map.market_map_config import WebsocketConfig
 from driftpy.user_map.user_map import UserMap, UserMapConfig, PollingConfig
 import datetime
 import csv
-from utils import get_init_health
+from concurrent.futures import ProcessPoolExecutor
+
+
+def get_init_health(user: DriftUser):
+    if user.is_being_liquidated():
+        return 0
+
+    total_collateral = user.get_total_collateral(MarginCategory.INITIAL)
+    maintenance_margin_req = user.get_margin_requirement(MarginCategory.INITIAL)
+
+    if maintenance_margin_req == 0 and total_collateral >= 0:
+        return 100
+    elif total_collateral <= 0:
+        return 0
+    else:
+        return round(
+            min(100, max(0, (1 - maintenance_margin_req / total_collateral) * 100))
+        )
+
 
 NUMBER_OF_SPOT = len(mainnet_spot_market_configs)
 NUMBER_OF_PERP = len(mainnet_perp_market_configs)
@@ -223,6 +241,19 @@ async def get_usermap_df(
         )[0]
 
     if mode == "margins":
+        # def do_work(margin_category, user_vals):
+        #     return list(do_dict(x, margin_category) for x in user_vals)
+        # dicts = []
+        # with ProcessPoolExecutor() as executor:
+        #     work_args = [
+        #         (None, user_vals),
+        #         (MarginCategory.INITIAL, user_vals),
+        #         (MarginCategory.MAINTENANCE, user_vals)
+        #     ]
+        #     results = list(executor.map(lambda p: do_work(*p), work_args))
+        #     for result in results:
+        #         dicts.append(result)
+        # return tuple(dicts), user_keys
         levs_none = list(do_dict(x, None) for x in user_vals)
         levs_init = list(do_dict(x, MarginCategory.INITIAL) for x in user_vals)
         levs_maint = list(do_dict(x, MarginCategory.MAINTENANCE) for x in user_vals)

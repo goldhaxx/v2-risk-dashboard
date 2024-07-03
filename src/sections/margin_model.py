@@ -18,6 +18,7 @@ from driftpy.drift_client import DriftClient
 from driftpy.constants.spot_markets import mainnet_spot_market_configs
 
 from sections.liquidation_curves import get_liquidation_list
+from utils import aggregate_perps
 from cache import get_cached_asset_liab_dfs  # type: ignore
 
 spot_fields = [
@@ -72,6 +73,7 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
         return
 
     vat: Vat = st.session_state["vat"]
+    aggregate_perps(vat)
 
     spot_df = get_spot_df(vat.spot_markets.values(), vat)
 
