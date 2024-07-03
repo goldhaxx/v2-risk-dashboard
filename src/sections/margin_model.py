@@ -17,7 +17,8 @@ from driftpy.constants.numeric_constants import (
 from driftpy.drift_client import DriftClient
 from driftpy.constants.spot_markets import mainnet_spot_market_configs
 
-from sections.liquidation_curves import get_liquidation_list  # type: ignore
+from sections.liquidation_curves import get_liquidation_list
+from cache import get_cached_asset_liab_dfs  # type: ignore
 
 spot_fields = [
     "deposit_balance",
@@ -164,24 +165,25 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
             "Select Markets", options=list(index_options.keys()), index=default_index
         )
 
-    with col2:
-        oracle_liquidation_offset = st.text_input("Oracle Liquidation Offset (%)", 50)
+    # TODO BROKEN
+    # with col2:
+    #     oracle_liquidation_offset = st.text_input("Oracle Liquidation Offset (%)", 50)
 
-        # def apply_liquidations(row, vat, oracle_liquidation_offset):
-        #     long_liq, short_liq = get_liquidations_offset_from_oracle(
-        #         row, vat, oracle_liquidation_offset
-        #     )
-        #     return pd.Series(
-        #         {"long_liq_notional": long_liq, "short_liq_notional": short_liq}
-        #     )
+    # def apply_liquidations(row, vat, oracle_liquidation_offset):
+    #     long_liq, short_liq = get_liquidations_offset_from_oracle(
+    #         row, vat, oracle_liquidation_offset
+    #     )
+    #     return pd.Series(
+    #         {"long_liq_notional": long_liq, "short_liq_notional": short_liq}
+    #     )
 
-        # spot_df[["long_liq_notional", "short_liq_notional"]] = spot_df.apply(
-        #     lambda row: apply_liquidations(row, vat, int(oracle_liquidation_offset)), # type: ignore
-        #     axis=1,
-        # )
+    # spot_df[["long_liq_notional", "short_liq_notional"]] = spot_df.apply(
+    #     lambda row: apply_liquidations(row, vat, int(oracle_liquidation_offset)), # type: ignore
+    #     axis=1,
+    # )
 
-        # spot_df.insert(6, "long_liq_notional", spot_df.pop("long_liq_notional"))
-        # spot_df.insert(7, "short_liq_notional", spot_df.pop("short_liq_notional"))
+    # spot_df.insert(6, "long_liq_notional", spot_df.pop("long_liq_notional"))
+    # spot_df.insert(7, "short_liq_notional", spot_df.pop("short_liq_notional"))
 
     selected_indexes = index_options[selected_option]  # type: ignore
 
@@ -194,22 +196,49 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
     index_options_list = list(index_options.values())
 
     all_analytics_df = get_analytics_df(index_options_list[0], spot_df)
+    sol_and_lst_basis_df = get_analytics_df(index_options_list[2], spot_df)
+    wrapped_basis_df = get_analytics_df(index_options_list[4], spot_df)
+    wif_df = get_analytics_df([10], spot_df)
 
     total_margin_available = all_analytics_df["target_margin_extended"].sum()
 
     st.markdown(
-        f"##### Total Theoretical Margin Extended: `${total_margin_available:,.2f}` #####"
+        f"##### Total Target Margin Extended: `${total_margin_available:,.2f}` #####"
     )
 
     tabs = st.tabs(list(index_options.keys()))
 
     for idx, tab in enumerate(tabs):
         with tab:
-            analytics_df = get_analytics_df(index_options_list[idx], spot_df)
-            st.dataframe(display_formatted_df(analytics_df))
+            if idx == 0:
+                st.dataframe(display_formatted_df(all_analytics_df))
+            elif idx == 2:
+                st.dataframe(display_formatted_df(sol_and_lst_basis_df))
+            elif idx == 4:
+                st.dataframe(display_formatted_df(wrapped_basis_df))
+            elif set(index_options_list[idx]).issubset(set(sol_and_lst)):
+                filtered_df = sol_and_lst_basis_df[
+                    sol_and_lst_basis_df.index == index_options_list[idx][0]
+                ]
+                st.dataframe(display_formatted_df(filtered_df))
+            elif set(index_options_list[idx]).issubset(wrapped):
+                filtered_df = wrapped_basis_df[
+                    wrapped_basis_df.index == index_options_list[idx][0]
+                ]
+                st.dataframe(display_formatted_df(filtered_df))
+            elif set(index_options_list[idx]).issubset(set([10])):  # WIF
+                st.dataframe(display_formatted_df(wif_df))
+            else:
+                analytics_df = get_analytics_df(index_options_list[idx], spot_df)
+                st.dataframe(display_formatted_df(analytics_df))
 
 
 def get_analytics_df(market_indexes: list[int], spot_df: pd.DataFrame):
+    (levs_none, _, _) = st.session_state["asset_liab_data"][0]
+    user_keys = st.session_state["asset_liab_data"][1]
+
+    df = pd.DataFrame(levs_none, index=user_keys)
+
     analytics_df = pd.DataFrame()
     analytics_df.index = spot_df.index
     columns = [
@@ -222,6 +251,22 @@ def get_analytics_df(market_indexes: list[int], spot_df: pd.DataFrame):
     ]
     analytics_df[columns] = spot_df[columns]
 
+    def is_basis(market_indexes):
+        sol_lst_set = set(sol_and_lst)
+        wrapped_set = set(wrapped)
+        wif_set = set([10])
+
+        is_sol_lst = market_indexes.issubset(sol_lst_set)
+        is_wrapped = market_indexes.issubset(wrapped_set)
+        is_wif = market_indexes.issubset(wif_set)
+
+        return is_sol_lst or is_wrapped or is_wif
+
+    if is_basis(set(market_indexes)):
+        analytics_df["basis_short"] = spot_df.apply(
+            lambda row: get_basis_trade_notional(row, df), axis=1
+        )
+
     def get_margin_scalar(symbol):
         return margin_scalars.get(symbol, DEFAULT_MARGIN_SCALAR)
 
@@ -230,6 +275,45 @@ def get_analytics_df(market_indexes: list[int], spot_df: pd.DataFrame):
     ) * analytics_df["symbol"].map(get_margin_scalar)
 
     return analytics_df.loc[analytics_df.index.isin(market_indexes)]
+
+
+def get_perp_short(df, market_index, basis_index):
+    new_column_name = f"perp_{basis_index}_short"
+
+    def calculate_perp_short(row):
+        net_v = row["net_v"][market_index]
+        net_p = row["net_p"][basis_index]
+        spot_asset = row["spot_asset"]
+
+        condition = net_v > 0 and net_p < 0
+        value = net_v / spot_asset * net_p if condition else 0
+
+        return value
+
+    df[new_column_name] = df.apply(calculate_perp_short, axis=1)
+
+    return df[new_column_name]
+
+
+def get_basis_trade_notional(row, df):
+    basis_index = -1
+    market_index = row.name
+    if market_index in sol_and_lst and market_index != 0:
+        basis_index = 0
+    elif market_index == 3:
+        basis_index = 1
+    elif market_index == 4:
+        basis_index = 2
+
+    if basis_index == -1:
+        return 0
+
+    perp_short_series = get_perp_short(df, market_index, basis_index)
+    total_perp_short = perp_short_series.sum()
+    print(
+        f"Total perp short for market_index {market_index} basis_index {basis_index}: {total_perp_short}"
+    )
+    return abs(total_perp_short)
 
 
 def get_liquidations_offset_from_oracle(row, vat, oracle_liquidation_offset: int):
@@ -331,6 +415,7 @@ def display_formatted_df(df):
         "max_margin_extended": "${:,.2f}",
         "perp_leverage": "{:.2f}",
         "target_margin_extended": "${:,.2f}",
+        "basis_short": "${:,.2f}",
         # "short_liq_notional": "${:,.2f}",
         # "long_liq_notional": "${:,.2f}",
     }
