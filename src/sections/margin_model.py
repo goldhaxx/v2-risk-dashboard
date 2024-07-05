@@ -17,9 +17,9 @@ from driftpy.constants.numeric_constants import (
 from driftpy.drift_client import DriftClient
 from driftpy.constants.spot_markets import mainnet_spot_market_configs
 
-from sections.liquidation_curves import get_liquidation_list
 from utils import aggregate_perps
 from cache import get_cached_asset_liab_dfs  # type: ignore
+from driftpy.drift_user import DriftUser
 
 spot_fields = [
     "deposit_balance",
@@ -73,7 +73,9 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
         return
 
     vat: Vat = st.session_state["vat"]
-    # aggregate_perps(vat)
+    agg_df, aggregated_users = aggregate_perps(vat, loop)
+
+    # st.dataframe(df)
 
     spot_df = get_spot_df(vat.spot_markets.values(), vat)
 
@@ -168,24 +170,37 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
         )
 
     # TODO BROKEN
-    # with col2:
-    #     oracle_liquidation_offset = st.text_input("Oracle Liquidation Offset (%)", 50)
+    with col2:
+        oracle_liquidation_offset = st.text_input("Oracle Liquidation Offset (%)", 50)
 
-    # def apply_liquidations(row, vat, oracle_liquidation_offset):
-    #     long_liq, short_liq = get_liquidations_offset_from_oracle(
-    #         row, vat, oracle_liquidation_offset
-    #     )
-    #     return pd.Series(
-    #         {"long_liq_notional": long_liq, "short_liq_notional": short_liq}
-    #     )
+        liqs_long, liqs_short = get_liquidations_offset(
+            agg_df, aggregated_users, vat, int(oracle_liquidation_offset)
+        )
 
-    # spot_df[["long_liq_notional", "short_liq_notional"]] = spot_df.apply(
-    #     lambda row: apply_liquidations(row, vat, int(oracle_liquidation_offset)), # type: ignore
-    #     axis=1,
-    # )
+        totals_long = {}
 
-    # spot_df.insert(6, "long_liq_notional", spot_df.pop("long_liq_notional"))
-    # spot_df.insert(7, "short_liq_notional", spot_df.pop("short_liq_notional"))
+        for market_index, notional in liqs_long:
+            notional_pos = -notional if notional < 0 else notional
+            totals_long[market_index] = totals_long.get(market_index, 0) + notional_pos
+
+        totals_short = {}
+        for market_index, notional in liqs_short:
+            notional_pos = -notional if notional < 0 else notional
+            totals_short[market_index] = (
+                totals_short.get(market_index, 0) + notional_pos
+            )
+
+        long_liq_notional = pd.Series(totals_long, name="long_liq_notional")
+        short_liq_notional = pd.Series(totals_short, name="short_liq_notional")
+
+        long_liq_notional = long_liq_notional.reindex(spot_df.index, fill_value=0)
+        short_liq_notional = short_liq_notional.reindex(spot_df.index, fill_value=0)
+
+        spot_df = spot_df.join(long_liq_notional)
+        spot_df = spot_df.join(short_liq_notional)
+
+    spot_df.insert(6, "long_liq_notional", spot_df.pop("long_liq_notional"))
+    spot_df.insert(7, "short_liq_notional", spot_df.pop("short_liq_notional"))
 
     selected_indexes = index_options[selected_option]  # type: ignore
 
@@ -357,26 +372,84 @@ def get_basis_trade_notional(row, df):
     return abs(total_perp_short)
 
 
-def get_liquidations_offset_from_oracle(row, vat, oracle_liquidation_offset: int):
-    market_index = row.name
-    liquidations_long, liquidations_short, oracle_price = get_liquidation_list(
-        vat, int(market_index), True
-    )
+def get_liquidations_offset(
+    df: pd.DataFrame,
+    aggregated_users: list[DriftUser],
+    vat: Vat,
+    oracle_liquidation_offset,
+):
+    import copy
 
-    def get_liqs(liqs):
-        liq_notional = 0
-        for liq_price, notional, _ in liqs:
-            diff = abs(liq_price - oracle_price)
-            threshold = liq_price * (oracle_liquidation_offset / 100)
-            if diff < threshold:
-                liq_notional += notional
+    long_liquidations = []
+    short_liquidations = []
+    curr_sol_perp_price = vat.perp_oracles.get(0).price / PRICE_PRECISION
+    from driftpy.account_subscription_config import AccountSubscriptionConfig
 
-        return liq_notional
+    for user in aggregated_users:
+        user_total_spot_value = df.loc[user.user_public_key, "spot_asset"]
+        for position in user.get_user_account().spot_positions:
+            fake_user_account = user.get_user_account()
+            spot_market_index = position.market_index
+            # proportion their perp position according to the spot value
+            isolated_collateral_usd = df.loc[user.user_public_key, "net_v"][
+                spot_market_index
+            ]
+            proportion = isolated_collateral_usd / user_total_spot_value
+            for pos in fake_user_account.perp_positions:
+                print(pos.market_index)
+            pp = [
+                pos for pos in fake_user_account.perp_positions if pos.market_index == 0
+            ][0]
+            perp_position = copy.deepcopy(pp)
+            perp_position.base_asset_amount = int(
+                perp_position.base_asset_amount * proportion
+            )
+            perp_position.quote_asset_amount = int(
+                perp_position.quote_asset_amount * proportion
+            )
 
-    long_liq_notional = get_liqs(liquidations_long)
-    short_liq_notional = get_liqs(liquidations_short)
+            # create a fake drift user with the proportioned perp position & isolated spot position
+            fake_user_account.spot_positions = [position]
+            fake_user_account.perp_positions = [perp_position]
+            prev_user = DriftUser(
+                user.drift_client,
+                user.user_public_key,
+                AccountSubscriptionConfig("cached"),
+            )
+            prev_user.account_subscriber.user_and_slot = (
+                user.account_subscriber.user_and_slot
+            )
+            user.account_subscriber.user_and_slot.data = fake_user_account
 
-    return (long_liq_notional, short_liq_notional)
+            # insert a fake price into the user account
+            spot_oracle_pubkey = vat.spot_markets.get(position.market_index).data.oracle
+            prev_price_data = vat.spot_oracles.get(position.market_index)
+            prev_price = prev_price_data.price
+            user.drift_client.account_subscriber.cache["oracle_price_data"][
+                str(spot_oracle_pubkey)
+            ].price = int(prev_price * (int(oracle_liquidation_offset) / 100))
+            # get notional of position after prices change
+            position_notional = (
+                user.get_margin_requirement(liquidation_buffer=100)
+                - user.get_total_collateral()
+            ) / QUOTE_PRECISION
+
+            # get liquidation price of the perp if spot price changes by oracle_liquidation_offset
+            liquidation_price = user.get_perp_liq_price(0) / PRICE_PRECISION
+            user.drift_client.account_subscriber.cache["oracle_price_data"][
+                str(spot_oracle_pubkey)
+            ].price = prev_price
+            user = prev_user
+
+            is_short = perp_position.base_asset_amount < 0
+            is_long = perp_position.base_asset_amount > 0
+
+            if is_short and liquidation_price > curr_sol_perp_price:
+                short_liquidations.append((spot_market_index, position_notional))
+            elif is_long and liquidation_price < curr_sol_perp_price:
+                long_liquidations.append((spot_market_index, position_notional))
+
+    return long_liquidations, short_liquidations
 
 
 def get_spot_df(accounts: Iterator[DataAndSlot[SpotMarketAccount]], vat: Vat):
@@ -459,8 +532,8 @@ def display_formatted_df(df):
         "basis_short": "${:,.2f}",
         "leverage": "{:.2f}",
         "health": "{:.2%}%",
-        # "short_liq_notional": "${:,.2f}",
-        # "long_liq_notional": "${:,.2f}",
+        "short_liq_notional": "${:,.2f}",
+        "long_liq_notional": "${:,.2f}",
     }
 
     df.rename(columns={"all_liabilities": "perp_liabilities"}, inplace=True)

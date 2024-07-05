@@ -28,7 +28,7 @@ from driftpy.math.margin import MarginCategory
 from driftpy.constants.numeric_constants import (
     PRICE_PRECISION,
     MARGIN_PRECISION,
-    BASE_PRECISION,
+    QUOTE_PRECISION,
 )
 from driftpy.math.margin import calculate_size_premium_liability_weight
 from scenario import (
@@ -151,7 +151,7 @@ async def load_vat(
     return vat
 
 
-def aggregate_perps(vat: Vat):
+def aggregate_perps(vat: Vat, loop: AbstractEventLoop):
     print("aggregating perps")
 
     def aggregate_perp(user: DriftUser) -> DriftUser:
@@ -162,9 +162,10 @@ def aggregate_perps(vat: Vat):
         for perp_position in user_account.perp_positions:
             if perp_position.base_asset_amount == 0:
                 continue
-            print(perp_position.market_index)
             asset_price = vat.perp_oracles.get(perp_position.market_index).price  # type: ignore
+
             market = vat.perp_markets.get(perp_position.market_index)
+            # ratio transform
             sol_margin_ratio = calculate_market_margin_ratio(
                 sol_market, agg_perp.base_asset_amount, MarginCategory.INITIAL
             )
@@ -173,19 +174,23 @@ def aggregate_perps(vat: Vat):
             )
             sol_margin_scalar = 1 / (sol_margin_ratio / MARGIN_PRECISION)
             curr_margin_scalar = 1 / (margin_ratio / MARGIN_PRECISION)
+
+            # simple price conversion
             exchange_rate = sol_price / asset_price
             exchange_rate_normalized = exchange_rate / PRICE_PRECISION
             new_baa = perp_position.base_asset_amount * exchange_rate_normalized
+
+            # apply margin ratio transofmr
             new_baa_adjusted = new_baa * (sol_margin_scalar / curr_margin_scalar)
-            print(
-                f"pos: {perp_position.base_asset_amount} orig: {new_baa} adjusted: {new_baa_adjusted} sol scalar: {sol_margin_scalar} curr scalar: {curr_margin_scalar} pos index: {perp_position.market_index}"
-            )
+
+            # aggregate
             agg_perp.base_asset_amount += new_baa_adjusted
             agg_perp.quote_asset_amount += perp_position.quote_asset_amount
 
         if agg_perp.base_asset_amount == 0:
             return None
 
+        # force use this new fake user account for all sdk functions
         user_account.perp_positions = [agg_perp]
         ds = user.account_subscriber.user_and_slot
         ds.data = user_account
@@ -193,34 +198,71 @@ def aggregate_perps(vat: Vat):
         return user
 
     users_list = list(vat.users.values())
+
     import copy
 
-    copied = copy.deepcopy(users_list)
+    # deep copy usermap
+    # required or else aggregation affects vat.users which breaks stuff p bad
+    usermap = UserMap(UserMapConfig(vat.drift_client, UserMapWebsocketConfig()))
+    for user in users_list:
+        loop.run_until_complete(
+            usermap.add_pubkey(
+                copy.deepcopy(user.user_public_key),
+                copy.deepcopy(user.get_user_account_and_slot()),
+            )
+        )
+
     aggregated_users = [
-        user for user in (aggregate_perp(user) for user in copied) if user is not None
+        user
+        for user in (aggregate_perp(user) for user in usermap.values())
+        if user is not None
     ]
 
-    for user in aggregated_users[:10]:
-        print(user.get_user_account())
-    # print(aggregated_users[:10])
-    user_keys = [user.user_public_key for user in vat.users.values()]
+    user_keys = [user.user_public_key for user in aggregated_users]
 
-    # def transform(user: DriftUser):
-    #     transforms = {
-    #         "user_key": user.user_public_key,
-    #         "net_v": get_collateral_composition(user, MarginCategory.INITIAL, NUMBER_OF_SPOT),
-    #         "net_p": get_perp_liab_composition(user, MarginCategory.INITIAL, NUMBER_OF_SPOT),
-    #     }
+    # list into dataframe (similar to get_usermap_df but simpler)
+    def prepare_for_df(user: DriftUser):
+        calcs = {
+            "spot_asset": user.get_spot_market_asset_value(None, MarginCategory.INITIAL)
+            / QUOTE_PRECISION,
+            "net_v": get_collateral_composition(
+                user, MarginCategory.INITIAL, NUMBER_OF_SPOT
+            ),
+            "net_p": get_perp_liab_composition(
+                user, MarginCategory.INITIAL, NUMBER_OF_SPOT
+            ),
+        }
 
-    #     return transforms
+        return calcs
 
-    # transformed_agg = [transform(user) for user in aggregated_users]
+    pre_df_users = [prepare_for_df(user) for user in aggregated_users]
+    df = pd.DataFrame(pre_df_users, index=user_keys)
 
-    # for transformed in transformed_agg[:10]:
-    #     print(transformed)
-    # print(transformed_agg)
+    # isolated margin (stolen from get_matrix but with perp_market_inspect as 0)
+    def isolate(row):
+        calculations = [
+            (
+                f"aggregated_perp_long",
+                lambda v: v / row["spot_asset"] * row["net_p"][0]
+                if v > 0 and row["net_p"][0] > 0
+                else 0,
+            ),
+            (
+                f"aggregated_perp_short",
+                lambda v: v / row["spot_asset"] * row["net_p"][0]
+                if v > 0 and row["net_p"][0] < 0
+                else 0,
+            ),
+        ]
 
-    # df = pd.DataFrame(transformed_agg, index=user_keys)
+        series_list = []
+        for suffix, func in calculations:
+            series = pd.Series([func(val)] for _, val in row["net_v"].items())
+            series.index = [f"spot_{x}_{suffix}" for x in series.index]
+            series_list.append(series)
 
-    def into_df(row):
-        pass
+        return pd.concat(series_list)
+
+    df = pd.concat([df, df.apply(isolate, axis=1)], axis=1)
+
+    return (df, aggregated_users)

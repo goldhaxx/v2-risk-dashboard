@@ -20,7 +20,7 @@ from driftpy.constants.perp_markets import mainnet_perp_market_configs
 options = {market.symbol: market.market_index for market in mainnet_perp_market_configs}
 
 
-def get_liquidation_list(vat: Vat, market_index: int, use_liq_buffer=False):
+def get_liquidation_curve(vat: Vat, market_index: int, use_liq_buffer=False):
     liquidations_long: list[tuple[float, float, Pubkey]] = []
     liquidations_short: list[tuple[float, float, Pubkey]] = []
     market_price = vat.perp_oracles.get(market_index)
@@ -75,21 +75,16 @@ def get_liquidation_list(vat: Vat, market_index: int, use_liq_buffer=False):
                     )
                 else:
                     pass
+                    # print(f"liquidation price for user {user.user_public_key} is {liquidation_price_ui} and market price is {market_price_ui} - is_short: {is_short} - size {position_size} - notional {position_notional}")
 
     liquidations_long.sort(key=lambda x: x[0])
     liquidations_short.sort(key=lambda x: x[0])
 
-    return liquidations_long, liquidations_short, market_price_ui
+    # for (price, size) in liquidations_long:
+    #     print(f"Long liquidation for {size} @ {price}")
 
-
-def get_liquidation_curve(vat: Vat, market_index: int, use_liq_buffer=False):
-    liquidations_long, liquidations_short, market_price_ui = get_liquidation_list(
-        vat, market_index, use_liq_buffer
-    )
-
-    print(len(liquidations_long))
-    print(len(liquidations_short))
-    print(market_price_ui)
+    # for (price, size) in liquidations_short:
+    #     print(f"Short liquidation for {size} @ {price}")
 
     return plot_liquidation_curves(
         liquidations_long, liquidations_short, market_price_ui
