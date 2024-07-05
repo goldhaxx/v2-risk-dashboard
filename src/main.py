@@ -44,13 +44,13 @@ from cache import get_cached_asset_liab_dfs
 from health_utils import *
 
 
-def setup_context(dc: DriftClient, loop: AbstractEventLoop):
+def setup_context(dc: DriftClient, loop: AbstractEventLoop, env):
     vat: Vat
     if "vat" not in st.session_state:
         newest_snapshot = load_newest_files(os.getcwd() + "/pickles")
 
         start_load_vat = time.time()
-        vat = loop.run_until_complete(load_vat(dc, newest_snapshot))
+        vat = loop.run_until_complete(load_vat(dc, newest_snapshot, loop, env))
         st.session_state["vat"] = vat
         print(f"loaded vat in {time.time() - start_load_vat}")
     else:
@@ -71,6 +71,8 @@ def main():
     st.set_page_config(layout="wide")
 
     query_index = 0
+
+    env = st.sidebar.radio("Environment:", ["dev", "prod"])
 
     def query_string_callback():
         st.query_params["tab"] = st.session_state.query_key
@@ -135,7 +137,7 @@ def main():
         and "vat" not in st.session_state
     ):
         if st.session_state["context"] == False:
-            setup_context(drift_client, loop)
+            setup_context(drift_client, loop, env)
     elif tab.lower() in [
         "health",
         "price-shock",

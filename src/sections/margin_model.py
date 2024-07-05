@@ -73,7 +73,7 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
         return
 
     vat: Vat = st.session_state["vat"]
-    aggregate_perps(vat)
+    # aggregate_perps(vat)
 
     spot_df = get_spot_df(vat.spot_markets.values(), vat)
 
@@ -213,7 +213,8 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
     for idx, tab in enumerate(tabs):
         with tab:
             if idx == 0:
-                st.dataframe(display_formatted_df(all_analytics_df))
+                current_analytics_df = all_analytics_df
+                st.dataframe(display_formatted_df(current_analytics_df))
             elif idx == 2:
                 st.dataframe(display_formatted_df(sol_and_lst_basis_df))
             elif idx == 4:
@@ -233,6 +234,44 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
             else:
                 analytics_df = get_analytics_df(index_options_list[idx], spot_df)
                 st.dataframe(display_formatted_df(analytics_df))
+
+    (levs_none, _, _) = st.session_state["asset_liab_data"][0]
+    user_keys = st.session_state["asset_liab_data"][1]
+
+    df = pd.DataFrame(levs_none, index=user_keys)
+
+    lev, size = get_size_and_lev(df, selected_indexes)
+
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        with st.expander("users by size (selected overview category)"):
+            st.dataframe(size)
+
+    with col2:
+        with st.expander("users by lev (selected overview category)"):
+            st.dataframe(lev)
+
+
+def get_size_and_lev(df: pd.DataFrame, market_indexes: list[int]):
+    def has_target(net_v, market_indexes):
+        if isinstance(net_v, dict):
+            return any(net_v.get(idx, 0) != 0 for idx in market_indexes)
+        return False
+
+    lev = df.sort_values(by="leverage", ascending=False)
+
+    lev = lev[lev.apply(lambda row: has_target(row["net_v"], market_indexes), axis=1)]
+
+    size = df.sort_values(by="spot_asset", ascending=False)
+    size = size[
+        size.apply(lambda row: has_target(row["net_v"], market_indexes), axis=1)
+    ]
+
+    lev.pop("user_key")
+    size.pop("user_key")
+
+    return lev, size
 
 
 def get_analytics_df(market_indexes: list[int], spot_df: pd.DataFrame):
@@ -418,6 +457,8 @@ def display_formatted_df(df):
         "perp_leverage": "{:.2f}",
         "target_margin_extended": "${:,.2f}",
         "basis_short": "${:,.2f}",
+        "leverage": "{:.2f}",
+        "health": "{:.2%}%",
         # "short_liq_notional": "${:,.2f}",
         # "long_liq_notional": "${:,.2f}",
     }

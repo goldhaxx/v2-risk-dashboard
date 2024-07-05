@@ -1,3 +1,4 @@
+from asyncio import AbstractEventLoop
 import pandas as pd
 import numpy as np
 
@@ -93,7 +94,12 @@ def load_newest_files(directory: Optional[str] = None) -> dict[str, str]:
 
 # function assumes that you have already subscribed
 # the use of websocket configs in here doesn't matter because the maps are never subscribed to
-async def load_vat(dc: DriftClient, pickle_map: dict[str, str]) -> Vat:
+async def load_vat(
+    dc: DriftClient,
+    pickle_map: dict[str, str],
+    loop: AbstractEventLoop,
+    env: str = "prod",
+) -> Vat:
     perp = MarketMap(
         MarketMapConfig(
             dc.program, MarketType.Perp(), MarketMapWebsocketConfig(), dc.connection
@@ -127,6 +133,20 @@ async def load_vat(dc: DriftClient, pickle_map: dict[str, str]) -> Vat:
         spot_oracles_filename,
         perp_oracles_filename,
     )
+
+    if env == "dev":
+        users = []
+        for user in vat.users.values():
+            value = user.get_net_spot_market_value(None) + user.get_unrealized_pnl(True)
+            users.append(
+                (value, user.user_public_key, user.get_user_account_and_slot())
+            )
+        users.sort(key=lambda x: x[0], reverse=True)
+        vat.users.clear()
+        for user in users[:100]:
+            await vat.users.add_pubkey(user[1], user[2])
+
+    print(vat.users.values())
 
     return vat
 
