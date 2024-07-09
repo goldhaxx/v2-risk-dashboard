@@ -103,6 +103,17 @@ def get_perp_liab_composition(x: DriftUser, margin_category, n):
     return net_p
 
 
+def get_perp_liab_composition_with_oo(x: DriftUser, margin_category, n):
+    net_p = {
+        i: x.get_perp_market_liability(
+            i, margin_category, signed=True, include_open_orders=True
+        )
+        / QUOTE_PRECISION
+        for i in range(n)
+    }
+    return net_p
+
+
 def get_perp_lp_share_composition(x: DriftUser, n):
     # ua = x.get_user_account()
     def get_lp_shares(x, i):
@@ -139,6 +150,9 @@ async def get_usermap_df(
             health_func = lambda x: x.get_health()
 
         # user_account = x.get_user_account()
+
+        upnl = x.get_unrealized_pnl(True) / QUOTE_PRECISION
+
         levs0 = {
             # 'tokens': [x.get_token_amount(i) for i in range(spot_n)],
             "user_key": x.user_public_key,
@@ -146,14 +160,15 @@ async def get_usermap_df(
             "health": health_func(x),
             "perp_liability": x.get_perp_market_liability(None, margin_category)
             / QUOTE_PRECISION,
+            "perp_liability_include_oo": x.get_perp_market_liability(
+                None, margin_category, include_open_orders=True
+            ),
             "spot_asset": x.get_spot_market_asset_value(None, margin_category)
-            / QUOTE_PRECISION,
+            + upnl / QUOTE_PRECISION,
             "spot_liability": x.get_spot_market_liability_value(None, margin_category)
-            / QUOTE_PRECISION,
-            "upnl": x.get_unrealized_pnl(True) / QUOTE_PRECISION,
-            "net_usd_value": (
-                x.get_net_spot_market_value(None) + x.get_unrealized_pnl(True)
-            )
+            - upnl / QUOTE_PRECISION,
+            "upnl": upnl,
+            "net_usd_value": (x.get_net_spot_market_value(None) + upnl)
             / QUOTE_PRECISION,
             # 'funding_upnl': x.get_unrealized_funding_pnl() / QUOTE_PRECISION,
             # 'total_collateral': x.get_total_collateral(margin_category or MarginCategory.INITIAL) / QUOTE_PRECISION,
@@ -179,7 +194,11 @@ async def get_usermap_df(
 
         if all_fields:
             levs0["net_v"] = get_collateral_composition(x, margin_category, spot_n)
+            levs0["net_v"][0] + upnl
             levs0["net_p"] = get_perp_liab_composition(x, margin_category, spot_n)
+            levs0["net_p_oo"] = get_perp_liab_composition_with_oo(
+                x, margin_category, spot_n
+            )
 
         return levs0
 

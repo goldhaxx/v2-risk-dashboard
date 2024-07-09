@@ -18,7 +18,6 @@ from driftpy.drift_client import DriftClient
 from driftpy.constants.spot_markets import mainnet_spot_market_configs
 
 from utils import aggregate_perps
-from cache import get_cached_asset_liab_dfs  # type: ignore
 from driftpy.drift_user import DriftUser
 
 spot_fields = [
@@ -178,20 +177,42 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
         )
 
         totals_long = {}
+        users_long = {}
 
-        for market_index, notional in liqs_long:
-            notional_pos = -notional if notional < 0 else notional
-            totals_long[market_index] = totals_long.get(market_index, 0) + notional_pos
+        for market_index, notional, user_public_key, scaled_balance in liqs_long:
+            # notional_pos = -notional if notional < 0 else notional
+            print(f"notional long: {notional}")
+            totals_long[market_index] = totals_long.get(market_index, 0) + notional
+            users_long[user_public_key] = (
+                notional,
+                scaled_balance / SPOT_BALANCE_PRECISION,
+            )
 
         totals_short = {}
-        for market_index, notional in liqs_short:
-            notional_pos = -notional if notional < 0 else notional
-            totals_short[market_index] = (
-                totals_short.get(market_index, 0) + notional_pos
+        users_short = {}
+        print("\n\n\n")
+
+        for market_index, notional, user_public_key, scaled_balance in liqs_short:
+            # notional_pos = -notional if notional < 0 else notional
+            print(f"notional short: {notional}")
+            totals_short[market_index] = totals_short.get(market_index, 0) + notional
+            users_short[user_public_key] = (
+                notional,
+                scaled_balance / SPOT_BALANCE_PRECISION,
             )
+
+        long_users_list = pd.DataFrame.from_dict(users_long, orient="index")
+        short_users_list = pd.DataFrame.from_dict(users_short, orient="index")
+
+        long_users_list.columns = ["liquidation_notional", "scaled_balance"]
+        short_users_list.columns = ["liquidation_notional", "scaled_balance"]
 
         long_liq_notional = pd.Series(totals_long, name="long_liq_notional")
         short_liq_notional = pd.Series(totals_short, name="short_liq_notional")
+
+        print(totals_long)
+        print("\n\n\n")
+        print(totals_short)
 
         long_liq_notional = long_liq_notional.reindex(spot_df.index, fill_value=0)
         short_liq_notional = short_liq_notional.reindex(spot_df.index, fill_value=0)
@@ -267,6 +288,16 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
         with st.expander("users by lev (selected overview category)"):
             st.dataframe(lev)
 
+    col1, col2 = st.columns([1, 1])
+
+    with col1:
+        with st.expander("users long liquidation (offset)"):
+            st.dataframe(display_formatted_df(long_users_list))
+
+    with col2:
+        with st.expander("users short liquidation (offset)"):
+            st.dataframe(display_formatted_df(short_users_list))
+
 
 def get_size_and_lev(df: pd.DataFrame, market_indexes: list[int]):
     def has_target(net_v, market_indexes):
@@ -278,13 +309,28 @@ def get_size_and_lev(df: pd.DataFrame, market_indexes: list[int]):
 
     lev = lev[lev.apply(lambda row: has_target(row["net_v"], market_indexes), axis=1)]
 
+    lev["selected_assets"] = lev["net_v"].apply(
+        lambda net_v: {
+            idx: net_v.get(idx, 0) for idx in market_indexes if net_v.get(idx, 0) != 0
+        }
+    )
+
     size = df.sort_values(by="spot_asset", ascending=False)
     size = size[
         size.apply(lambda row: has_target(row["net_v"], market_indexes), axis=1)
     ]
 
+    size["selected_assets"] = size["net_v"].apply(
+        lambda net_v: {
+            idx: net_v.get(idx, 0) for idx in market_indexes if net_v.get(idx, 0) != 0
+        }
+    )
+
     lev.pop("user_key")
     size.pop("user_key")
+
+    lev.insert(2, "selected_assets", lev.pop("selected_assets"))
+    size.insert(2, "selected_assets", size.pop("selected_assets"))
 
     return lev, size
 
@@ -326,10 +372,17 @@ def get_analytics_df(market_indexes: list[int], spot_df: pd.DataFrame):
     def get_margin_scalar(symbol):
         return margin_scalars.get(symbol, DEFAULT_MARGIN_SCALAR)
 
-    analytics_df["target_margin_extended"] = (
-        (1 / analytics_df["perp_leverage"]) * analytics_df["deposit_balance"]
-    ) * analytics_df["symbol"].map(get_margin_scalar)
+    import numpy as np
 
+    new_target_margin = np.where(
+        analytics_df["perp_leverage"] > analytics_df["deposit_balance"],
+        (1 / analytics_df["perp_leverage"])
+        * analytics_df["deposit_balance"]
+        * analytics_df["symbol"].map(get_margin_scalar),
+        analytics_df["max_margin_extended"],
+    )
+
+    analytics_df["target_margin_extended"] = new_target_margin
     return analytics_df.loc[analytics_df.index.isin(market_indexes)]
 
 
@@ -382,12 +435,15 @@ def get_liquidations_offset(
 
     long_liquidations = []
     short_liquidations = []
-    curr_sol_perp_price = vat.perp_oracles.get(0).price / PRICE_PRECISION
+    curr_sol_perp_price = vat.perp_oracles.get(0).price / PRICE_PRECISION  # type: ignore
     from driftpy.account_subscription_config import AccountSubscriptionConfig
 
     for user in aggregated_users:
         user_total_spot_value = df.loc[user.user_public_key, "spot_asset"]
         for position in user.get_user_account().spot_positions:
+            # ignore borrows
+            if position.scaled_balance < 0:
+                continue
             fake_user_account = user.get_user_account()
             spot_market_index = position.market_index
             # proportion their perp position according to the spot value
@@ -395,8 +451,6 @@ def get_liquidations_offset(
                 spot_market_index
             ]
             proportion = isolated_collateral_usd / user_total_spot_value
-            for pos in fake_user_account.perp_positions:
-                print(pos.market_index)
             pp = [
                 pos for pos in fake_user_account.perp_positions if pos.market_index == 0
             ][0]
@@ -422,20 +476,37 @@ def get_liquidations_offset(
             user.account_subscriber.user_and_slot.data = fake_user_account
 
             # insert a fake price into the user account
-            spot_oracle_pubkey = vat.spot_markets.get(position.market_index).data.oracle
+            spot_oracle_pubkey = vat.spot_markets.get(position.market_index).data.oracle  # type: ignore
             prev_price_data = vat.spot_oracles.get(position.market_index)
-            prev_price = prev_price_data.price
+            prev_price = prev_price_data.price  # type: ignore
+
+            # up move by oracle_liquidation_offset %
+            up_price = int(prev_price * (1 + (int(oracle_liquidation_offset) / 100)))
             user.drift_client.account_subscriber.cache["oracle_price_data"][
                 str(spot_oracle_pubkey)
-            ].price = int(prev_price * (int(oracle_liquidation_offset) / 100))
-            # get notional of position after prices change
-            position_notional = (
+            ].price = up_price
+            # get notional of position after price increase
+            long_position_notional = (
                 user.get_margin_requirement(liquidation_buffer=100)
                 - user.get_total_collateral()
             ) / QUOTE_PRECISION
 
-            # get liquidation price of the perp if spot price changes by oracle_liquidation_offset
-            liquidation_price = user.get_perp_liq_price(0) / PRICE_PRECISION
+            # get liquidation price of the perp if spot price increases by oracle_liquidation_offset &
+            up_move_liquidation_price = user.get_perp_liq_price(0) / PRICE_PRECISION
+
+            # down move by oracle_liquidation_offset %
+            down_price = int(prev_price * (1 - (int(oracle_liquidation_offset) / 100)))
+            user.drift_client.account_subscriber.cache["oracle_price_data"][
+                str(spot_oracle_pubkey)
+            ].price = down_price
+            # get notional of position after price decrease
+            short_position_notional = (
+                user.get_margin_requirement(liquidation_buffer=100)
+                - user.get_total_collateral()
+            ) / QUOTE_PRECISION
+
+            down_move_liquidation_price = user.get_perp_liq_price(0) / PRICE_PRECISION
+
             user.drift_client.account_subscriber.cache["oracle_price_data"][
                 str(spot_oracle_pubkey)
             ].price = prev_price
@@ -444,10 +515,24 @@ def get_liquidations_offset(
             is_short = perp_position.base_asset_amount < 0
             is_long = perp_position.base_asset_amount > 0
 
-            if is_short and liquidation_price > curr_sol_perp_price:
-                short_liquidations.append((spot_market_index, position_notional))
-            elif is_long and liquidation_price < curr_sol_perp_price:
-                long_liquidations.append((spot_market_index, position_notional))
+            if is_short and down_move_liquidation_price > curr_sol_perp_price:
+                short_liquidations.append(
+                    (
+                        spot_market_index,
+                        abs(short_position_notional),
+                        user.user_public_key,
+                        position.scaled_balance,
+                    )
+                )
+            elif is_long and up_move_liquidation_price < curr_sol_perp_price:
+                long_liquidations.append(
+                    (
+                        spot_market_index,
+                        abs(long_position_notional),
+                        user.user_public_key,
+                        position.scaled_balance,
+                    )
+                )
 
     return long_liquidations, short_liquidations
 
@@ -534,6 +619,8 @@ def display_formatted_df(df):
         "health": "{:.2%}%",
         "short_liq_notional": "${:,.2f}",
         "long_liq_notional": "${:,.2f}",
+        "liquidation_notional": "${:,.2f}",
+        "scaled_balance": "{:,.2f}",
     }
 
     df.rename(columns={"all_liabilities": "perp_liabilities"}, inplace=True)
