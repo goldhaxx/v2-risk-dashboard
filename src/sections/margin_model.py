@@ -440,6 +440,8 @@ def get_liquidations_offset(
 
     for user in aggregated_users:
         user_total_spot_value = df.loc[user.user_public_key, "spot_asset"]
+        if user_total_spot_value == 0:
+            continue
         for position in user.get_user_account().spot_positions:
             # ignore borrows
             if position.scaled_balance < 0:
@@ -455,6 +457,8 @@ def get_liquidations_offset(
                 pos for pos in fake_user_account.perp_positions if pos.market_index == 0
             ][0]
             perp_position = copy.deepcopy(pp)
+            if proportion > 1:
+                raise ValueError("Proportion should be less than 1: ", proportion)
             perp_position.base_asset_amount = int(
                 perp_position.base_asset_amount * proportion
             )

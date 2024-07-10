@@ -2,6 +2,8 @@ import asyncio
 import heapq
 import time
 import os
+import aiohttp
+import msgpack
 
 from asyncio import AbstractEventLoop
 import plotly.express as px  # type: ignore
@@ -43,28 +45,68 @@ from cache import get_cached_asset_liab_dfs
 
 from health_utils import *
 
+SERVER_URL = "http://127.0.0.1:8000"
 
-def setup_context(dc: DriftClient, loop: AbstractEventLoop, env):
+
+async def fetch_context(session: aiohttp.ClientSession, req: str) -> dict[str, Any]:
+    async with session.get(req) as response:
+        return msgpack.unpackb(await response.read(), strict_map_key=False)
+
+
+async def setup_context(dc: DriftClient, loop: AbstractEventLoop, env):
     vat: Vat
     if "vat" not in st.session_state:
         newest_snapshot = load_newest_files(os.getcwd() + "/pickles")
 
         start_load_vat = time.time()
-        vat = loop.run_until_complete(load_vat(dc, newest_snapshot, loop, env))
+        vat = await load_vat(dc, newest_snapshot, loop, env)
         st.session_state["vat"] = vat
         print(f"loaded vat in {time.time() - start_load_vat}")
     else:
         vat = st.session_state["vat"]
 
-    if "asset_liab_data" not in st.session_state:
-        st.session_state["asset_liab_data"] = get_cached_asset_liab_dfs(dc, vat, loop)
-
-    if "margin" not in st.session_state:
+    async with aiohttp.ClientSession() as session:
+        print("fetching context")
         start = time.time()
-        st.session_state["margin"] = get_matrix(loop, vat, dc)
-        print(f"loaded matrix in {time.time() - start}")
 
+        context_data = await fetch_context(session, f"{SERVER_URL}/{env}_context")
+
+        levs = [
+            context_data["levs_none"],
+            context_data["levs_init"],
+            context_data["levs_maint"],
+        ]
+        user_keys = context_data["user_keys"]
+        margin = [pd.DataFrame(context_data["res"]), pd.DataFrame(context_data["df"])]
+
+        st.session_state["margin"] = tuple(margin)
+        st.session_state["asset_liab_data"] = tuple(levs), user_keys
+        print("context fetched in ", time.time() - start)
     st.session_state["context"] = True
+    print(st.session_state["context"])
+
+
+# def setup_context(dc: DriftClient, loop: AbstractEventLoop, env):
+#     vat: Vat
+#     if "vat" not in st.session_state:
+#         newest_snapshot = load_newest_files(os.getcwd() + "/pickles")
+
+#         start_load_vat = time.time()
+#         vat = loop.run_until_complete(load_vat(dc, newest_snapshot, loop, env))
+#         st.session_state["vat"] = vat
+#         print(f"loaded vat in {time.time() - start_load_vat}")
+#     else:
+#         vat = st.session_state["vat"]
+
+#     if "asset_liab_data" not in st.session_state:
+#         st.session_state["asset_liab_data"] = get_cached_asset_liab_dfs(dc, vat, loop)
+
+#     if "margin" not in st.session_state:
+#         start = time.time()
+#         st.session_state["margin"] = get_matrix(loop, vat, dc)
+#         print(f"loaded matrix in {time.time() - start}")
+
+#     st.session_state["context"] = True
 
 
 def main():
@@ -72,7 +114,7 @@ def main():
 
     query_index = 0
 
-    env = st.sidebar.radio("Environment:", ["dev", "prod"])
+    env = st.sidebar.radio("Environment:", ["prod", "dev"])
 
     def query_string_callback():
         st.query_params["tab"] = st.session_state.query_key
@@ -108,6 +150,28 @@ def main():
         account_subscription=AccountSubscriptionConfig("cached"),
     )
 
+    def func():
+        if (
+            tab.lower()
+            in [
+                "welcome",
+                "health",
+                "price-shock",
+                "asset-liab-matrix",
+                "liquidations",
+                "margin-model",
+            ]
+            and "vat" not in st.session_state
+        ):
+            md = st.empty()
+            md.markdown("`Loading dashboard, do not leave this page`")
+            if st.session_state["context"] == False:
+                loop.run_until_complete(setup_context(drift_client, loop, env))
+                # setup_context(drift_client, loop, env)
+            md.markdown("`Dashboard ready!`")
+
+    st.sidebar.button("Start Dashboard", on_click=func)
+
     loop: AbstractEventLoop = asyncio.new_event_loop()
     st.session_state["context"] = False
 
@@ -123,22 +187,11 @@ def main():
             )
             + " days",
         )
+        st.write(
+            "Click `Start Dashboard` to load the dashboard on the selected `Environment`"
+        )
 
-    if (
-        tab.lower()
-        in [
-            "welcome",
-            "health",
-            "price-shock",
-            "asset-liab-matrix",
-            "liquidations",
-            "margin-model",
-        ]
-        and "vat" not in st.session_state
-    ):
-        if st.session_state["context"] == False:
-            setup_context(drift_client, loop, env)
-    elif tab.lower() in [
+    if tab.lower() in [
         "health",
         "price-shock",
         "asset-liab-matrix",

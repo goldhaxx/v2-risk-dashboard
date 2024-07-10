@@ -57,56 +57,61 @@ def price_shock_plot(price_scenario_users: list[Any], oracle_distort: float):
 
 
 def plot_page(loop: AbstractEventLoop, vat: Vat, drift_client: DriftClient):
-    cov_col, distort_col = st.columns(2)
-    cov = cov_col.selectbox(
-        "covariance:",
-        [
-            "ignore stables",
-            "sol + lst only",
-            "meme",
-        ],
-        index=0,
-    )
+    if st.session_state["context"] == False:
+        st.write("Please load dashboard before viewing this page")
+    else:
+        cov_col, distort_col = st.columns(2)
+        cov = cov_col.selectbox(
+            "covariance:",
+            [
+                "ignore stables",
+                "sol + lst only",
+                "meme",
+            ],
+            index=0,
+        )
 
-    oracle_distort = distort_col.selectbox(
-        "oracle distortion:",
-        [0.05, 0.1, 0.2, 0.5, 1],
-        index=0,
-        help="step size of oracle distortions",
-    )
+        oracle_distort = distort_col.selectbox(
+            "oracle distortion:",
+            [0.05, 0.1, 0.2, 0.5, 1],
+            index=0,
+            help="step size of oracle distortions",
+        )
 
-    user_keys = list(vat.users.user_map.keys())
-    st.write(len(user_keys), "drift users")
-    start_time = time.time()
+        user_keys = list(vat.users.user_map.keys())
+        st.write(len(user_keys), "drift users")
+        start_time = time.time()
 
-    price_scenario_users, user_keys, distorted_oracles = loop.run_until_complete(
-        get_usermap_df(drift_client, vat.users, "oracles", oracle_distort, None, cov)
-    )
-    # levs[0]
-    end_time = time.time()
-    time_to_run = end_time - start_time
-    st.write(
-        time_to_run,
-        "seconds to run",
-        1 + len(price_scenario_users[1]) + len(price_scenario_users[2]),
-        "price-shock scenarios",
-    )
+        price_scenario_users, user_keys, distorted_oracles = loop.run_until_complete(
+            get_usermap_df(
+                drift_client, vat.users, "oracles", oracle_distort, None, cov
+            )
+        )
+        # levs[0]
+        end_time = time.time()
+        time_to_run = end_time - start_time
+        st.write(
+            time_to_run,
+            "seconds to run",
+            1 + len(price_scenario_users[1]) + len(price_scenario_users[2]),
+            "price-shock scenarios",
+        )
 
-    price_shock_plot(price_scenario_users, oracle_distort)
+        price_shock_plot(price_scenario_users, oracle_distort)
 
-    oracle_down_max = pd.DataFrame(price_scenario_users[-1][-1], index=user_keys)
-    with st.expander(
-        str("oracle down max bankrupt count=")
-        + str(len(oracle_down_max[oracle_down_max.net_usd_value < 0]))
-    ):
-        st.dataframe(oracle_down_max)
+        oracle_down_max = pd.DataFrame(price_scenario_users[-1][-1], index=user_keys)
+        with st.expander(
+            str("oracle down max bankrupt count=")
+            + str(len(oracle_down_max[oracle_down_max.net_usd_value < 0]))
+        ):
+            st.dataframe(oracle_down_max)
 
-    oracle_up_max = pd.DataFrame(price_scenario_users[1][-1], index=user_keys)
-    with st.expander(
-        str("oracle up max bankrupt count=")
-        + str(len(oracle_up_max[oracle_up_max.net_usd_value < 0]))
-    ):
-        st.dataframe(oracle_up_max)
+        oracle_up_max = pd.DataFrame(price_scenario_users[1][-1], index=user_keys)
+        with st.expander(
+            str("oracle up max bankrupt count=")
+            + str(len(oracle_up_max[oracle_up_max.net_usd_value < 0]))
+        ):
+            st.dataframe(oracle_up_max)
 
-    with st.expander("distorted oracle keys"):
-        st.write(distorted_oracles)
+        with st.expander("distorted oracle keys"):
+            st.write(distorted_oracles)
