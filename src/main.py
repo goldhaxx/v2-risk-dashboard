@@ -1,51 +1,35 @@
 import asyncio
-import heapq
+import io
 import time
 import os
 import aiohttp
 import msgpack
+import zipfile
 
-from asyncio import AbstractEventLoop
-import plotly.express as px  # type: ignore
 import pandas as pd  # type: ignore
+import streamlit as st
 
 from typing import Any
 import datetime as dt
+from asyncio import AbstractEventLoop
+
 from solana.rpc.async_api import AsyncClient
 
 from anchorpy import Wallet
 
-import streamlit as st
-from driftpy.drift_user import DriftUser
 from driftpy.drift_client import DriftClient
 from driftpy.account_subscription_config import AccountSubscriptionConfig
-from driftpy.constants.numeric_constants import (
-    BASE_PRECISION,
-    SPOT_BALANCE_PRECISION,
-    PRICE_PRECISION,
-)
-from driftpy.types import is_variant
-from driftpy.pickle.vat import Vat
-from driftpy.constants.spot_markets import (
-    mainnet_spot_market_configs,
-    devnet_spot_market_configs,
-)
-from driftpy.constants.perp_markets import (
-    mainnet_perp_market_configs,
-    devnet_perp_market_configs,
-)
 
-from utils import load_newest_files, load_vat, to_financial
-from sections.asset_liab_matrix import asset_liab_matrix_page, get_matrix
+from health_utils import *
+from utils import load_newest_files, load_vat, clear_local_pickles
+from sections.asset_liab_matrix import asset_liab_matrix_page
 from sections.ob import ob_cmp_page
 from sections.scenario import plot_page
 from sections.liquidation_curves import plot_liquidation_curve
 from sections.margin_model import margin_model
-from cache import get_cached_asset_liab_dfs
 
-from health_utils import *
 
-SERVER_URL = "http://127.0.0.1:8000"
+SERVER_URL = "http://54.74.185.225:8080"
 
 
 async def fetch_context(session: aiohttp.ClientSession, req: str) -> dict[str, Any]:
@@ -53,23 +37,33 @@ async def fetch_context(session: aiohttp.ClientSession, req: str) -> dict[str, A
         return msgpack.unpackb(await response.read(), strict_map_key=False)
 
 
+async def fetch_pickles(session: aiohttp.ClientSession, req: str) -> dict[str, Any]:
+    async with session.get(req) as response:
+        content = await response.read()
+        with zipfile.ZipFile(io.BytesIO(content)) as zip_ref:
+            zip_ref.extractall(os.getcwd() + "/pickles")
+
+
 async def setup_context(dc: DriftClient, loop: AbstractEventLoop, env):
-    vat: Vat
-    if "vat" not in st.session_state:
-        newest_snapshot = load_newest_files(os.getcwd() + "/pickles")
-
-        start_load_vat = time.time()
-        vat = await load_vat(dc, newest_snapshot, loop, env)
-        st.session_state["vat"] = vat
-        print(f"loaded vat in {time.time() - start_load_vat}")
-    else:
-        vat = st.session_state["vat"]
-
+    start_dashboard_ready = time.time()
     async with aiohttp.ClientSession() as session:
         print("fetching context")
         start = time.time()
 
-        context_data = await fetch_context(session, f"{SERVER_URL}/{env}_context")
+        tasks = [
+            fetch_pickles(session, f"{SERVER_URL}/pickles"),
+            fetch_context(session, f"{SERVER_URL}/{env}_context"),
+        ]
+        _, context_data = await asyncio.gather(*tasks)
+        print("context fetched in ", time.time() - start)
+
+        filepath = os.getcwd() + "/pickles"
+        newest_snapshot = load_newest_files(filepath)
+        start_load_vat = time.time()
+        vat = await load_vat(dc, newest_snapshot, loop, env)
+        clear_local_pickles(filepath)
+        st.session_state["vat"] = vat
+        print(f"loaded vat in {time.time() - start_load_vat}")
 
         levs = [
             context_data["levs_none"],
@@ -81,32 +75,8 @@ async def setup_context(dc: DriftClient, loop: AbstractEventLoop, env):
 
         st.session_state["margin"] = tuple(margin)
         st.session_state["asset_liab_data"] = tuple(levs), user_keys
-        print("context fetched in ", time.time() - start)
     st.session_state["context"] = True
-    print(st.session_state["context"])
-
-
-# def setup_context(dc: DriftClient, loop: AbstractEventLoop, env):
-#     vat: Vat
-#     if "vat" not in st.session_state:
-#         newest_snapshot = load_newest_files(os.getcwd() + "/pickles")
-
-#         start_load_vat = time.time()
-#         vat = loop.run_until_complete(load_vat(dc, newest_snapshot, loop, env))
-#         st.session_state["vat"] = vat
-#         print(f"loaded vat in {time.time() - start_load_vat}")
-#     else:
-#         vat = st.session_state["vat"]
-
-#     if "asset_liab_data" not in st.session_state:
-#         st.session_state["asset_liab_data"] = get_cached_asset_liab_dfs(dc, vat, loop)
-
-#     if "margin" not in st.session_state:
-#         start = time.time()
-#         st.session_state["margin"] = get_matrix(loop, vat, dc)
-#         print(f"loaded matrix in {time.time() - start}")
-
-#     st.session_state["context"] = True
+    print(f"dashboard ready in: {time.time() - start_dashboard_ready}")
 
 
 def main():
@@ -167,7 +137,6 @@ def main():
             md.markdown("`Loading dashboard, do not leave this page`")
             if st.session_state["context"] == False:
                 loop.run_until_complete(setup_context(drift_client, loop, env))
-                # setup_context(drift_client, loop, env)
             md.markdown("`Dashboard ready!`")
 
     st.sidebar.button("Start Dashboard", on_click=func)

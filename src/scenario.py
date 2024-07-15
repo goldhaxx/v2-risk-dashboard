@@ -33,11 +33,7 @@ import os
 import json
 import streamlit as st
 from driftpy.constants.spot_markets import devnet_spot_market_configs, SpotMarketConfig
-from driftpy.constants.perp_markets import (
-    devnet_perp_market_configs,
-    PerpMarketConfig,
-    mainnet_perp_market_configs,
-)
+from driftpy.constants.perp_markets import devnet_perp_market_configs, PerpMarketConfig
 from dataclasses import dataclass
 from solders.pubkey import Pubkey
 
@@ -53,7 +49,9 @@ from driftpy.market_map.market_map_config import WebsocketConfig
 from driftpy.user_map.user_map import UserMap, UserMapConfig, PollingConfig
 import datetime
 import csv
-from concurrent.futures import ProcessPoolExecutor
+
+NUMBER_OF_SPOT = len(mainnet_spot_market_configs)
+NUMBER_OF_PERP = len(mainnet_perp_market_configs)
 
 
 def get_init_health(user: DriftUser):
@@ -71,10 +69,6 @@ def get_init_health(user: DriftUser):
         return round(
             min(100, max(0, (1 - maintenance_margin_req / total_collateral) * 100))
         )
-
-
-NUMBER_OF_SPOT = len(mainnet_spot_market_configs)
-NUMBER_OF_PERP = len(mainnet_perp_market_configs)
 
 
 def comb_asset_liab(a_l_tup):
@@ -97,17 +91,6 @@ def get_perp_liab_composition(x: DriftUser, margin_category, n):
     # ua = x.get_user_account()
     net_p = {
         i: x.get_perp_market_liability(i, margin_category, signed=True)
-        / QUOTE_PRECISION
-        for i in range(n)
-    }
-    return net_p
-
-
-def get_perp_liab_composition_with_oo(x: DriftUser, margin_category, n):
-    net_p = {
-        i: x.get_perp_market_liability(
-            i, margin_category, signed=True, include_open_orders=True
-        )
         / QUOTE_PRECISION
         for i in range(n)
     }
@@ -150,9 +133,6 @@ async def get_usermap_df(
             health_func = lambda x: x.get_health()
 
         # user_account = x.get_user_account()
-
-        upnl = x.get_unrealized_pnl(True) / QUOTE_PRECISION
-
         levs0 = {
             # 'tokens': [x.get_token_amount(i) for i in range(spot_n)],
             "user_key": x.user_public_key,
@@ -160,15 +140,14 @@ async def get_usermap_df(
             "health": health_func(x),
             "perp_liability": x.get_perp_market_liability(None, margin_category)
             / QUOTE_PRECISION,
-            "perp_liability_include_oo": x.get_perp_market_liability(
-                None, margin_category, include_open_orders=True
-            ),
             "spot_asset": x.get_spot_market_asset_value(None, margin_category)
-            + upnl / QUOTE_PRECISION,
+            / QUOTE_PRECISION,
             "spot_liability": x.get_spot_market_liability_value(None, margin_category)
-            - upnl / QUOTE_PRECISION,
-            "upnl": upnl,
-            "net_usd_value": (x.get_net_spot_market_value(None) + upnl)
+            / QUOTE_PRECISION,
+            "upnl": x.get_unrealized_pnl(True) / QUOTE_PRECISION,
+            "net_usd_value": (
+                x.get_net_spot_market_value(None) + x.get_unrealized_pnl(True)
+            )
             / QUOTE_PRECISION,
             # 'funding_upnl': x.get_unrealized_funding_pnl() / QUOTE_PRECISION,
             # 'total_collateral': x.get_total_collateral(margin_category or MarginCategory.INITIAL) / QUOTE_PRECISION,
@@ -194,11 +173,7 @@ async def get_usermap_df(
 
         if all_fields:
             levs0["net_v"] = get_collateral_composition(x, margin_category, spot_n)
-            levs0["net_v"][0] + upnl
             levs0["net_p"] = get_perp_liab_composition(x, margin_category, spot_n)
-            levs0["net_p_oo"] = get_perp_liab_composition_with_oo(
-                x, margin_category, spot_n
-            )
 
         return levs0
 

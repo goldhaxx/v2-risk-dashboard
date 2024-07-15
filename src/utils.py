@@ -35,7 +35,6 @@ from scenario import (
     NUMBER_OF_SPOT,
     get_collateral_composition,
     get_perp_liab_composition,
-    get_init_health,
 )
 
 
@@ -151,6 +150,11 @@ async def load_vat(
     return vat
 
 
+def clear_local_pickles(directory: str):
+    for filename in os.listdir(directory):
+        os.remove(directory + "/" + filename)
+
+
 def aggregate_perps(vat: Vat, loop: AbstractEventLoop):
     print("aggregating perps")
 
@@ -223,7 +227,7 @@ def aggregate_perps(vat: Vat, loop: AbstractEventLoop):
     # list into dataframe (similar to get_usermap_df but simpler)
     def prepare_for_df(user: DriftUser):
         calcs = {
-            "spot_asset": user.get_spot_market_asset_value(None, MarginCategory.INITIAL)
+            "spot_asset": user.get_net_spot_market_value(MarginCategory.INITIAL)
             / QUOTE_PRECISION,
             "net_v": get_collateral_composition(
                 user, MarginCategory.INITIAL, NUMBER_OF_SPOT
@@ -243,15 +247,19 @@ def aggregate_perps(vat: Vat, loop: AbstractEventLoop):
         calculations = [
             (
                 f"aggregated_perp_long",
-                lambda v: v / row["spot_asset"] * row["net_p"][0]
-                if v > 0 and row["net_p"][0] > 0
-                else 0,
+                lambda v: (
+                    v / row["spot_asset"] * row["net_p"][0]
+                    if v > 0 and row["net_p"][0] > 0
+                    else 0
+                ),
             ),
             (
                 f"aggregated_perp_short",
-                lambda v: v / row["spot_asset"] * row["net_p"][0]
-                if v > 0 and row["net_p"][0] < 0
-                else 0,
+                lambda v: (
+                    v / row["spot_asset"] * row["net_p"][0]
+                    if v > 0 and row["net_p"][0] < 0
+                    else 0
+                ),
             ),
         ]
 
