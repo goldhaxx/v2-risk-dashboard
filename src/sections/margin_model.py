@@ -98,16 +98,20 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
         open_interest += oi
     print(open_interest)
 
-    # agg_df, aggregated_users = aggregate_perps(vat, loop)
-    agg_df: pd.DataFrame
-    aggregated_users: list[DriftUser]
-    if "agg_perps" not in st.session_state:
-        agg_df, aggregated_users = aggregate_perps(vat, loop)
-        st.session_state["agg_perps"] = (agg_df, aggregated_users)
-    else:
-        agg_df, aggregated_users = st.session_state["agg_perps"]
+    aggregated_users = aggregate_perps(vat, loop)
+    # aggregated_users: list[DriftUser]
+    # if "agg_perps" not in st.session_state:
+    #     aggregated_users = aggregate_perps(vat, loop)
+    #     st.session_state["agg_perps"] = aggregated_users
+    # else:
+    #     aggregated_users = st.session_state["agg_perps"]
 
-    spot_df = get_spot_df(vat.spot_markets.values(), vat)
+    spot_df: pd.DataFrame
+    if "spot_df" not in st.session_state:
+        spot_df = get_spot_df(vat.spot_markets.values(), vat)
+        st.session_state["spot_df"] = spot_df
+    else:
+        spot_df = st.session_state["spot_df"]
 
     stable_df = spot_df[spot_df.index.isin(stables)]
 
@@ -206,7 +210,7 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
         oracle_warp = st.text_input("Oracle Warp (%, 0-100)", 50)
 
         liqs_long, liqs_short = get_liquidations(
-            aggregated_users, vat, int(oracle_warp)
+            aggregated_users, vat, int(oracle_warp), loop
         )
 
         totals_long = {}
@@ -585,157 +589,213 @@ def get_liquidations(
     aggregated_users: list[DriftUser],
     vat: Vat,
     oracle_warp: int,
+    loop: AbstractEventLoop,
 ) -> tuple[list[LiquidationInfo], list[LiquidationInfo]]:
     long_liquidations: list[LiquidationInfo] = []
     short_liquidations: list[LiquidationInfo] = []
 
-    current_sol_perp_price = vat.perp_oracles.get(0).price / PRICE_PRECISION  # type: ignore
+    from driftpy.account_subscription_config import AccountSubscriptionConfig
+    from driftpy.user_map.user_map import UserMap
+    from driftpy.user_map.user_map_config import UserMapConfig, WebsocketConfig
 
+    usermap = UserMap(UserMapConfig(vat.drift_client, WebsocketConfig()))
     for user in aggregated_users:
+        loop.run_until_complete(
+            usermap.add_pubkey(
+                copy.deepcopy(user.user_public_key),
+                copy.deepcopy(user.get_user_account_and_slot()),
+            )
+        )
+
+    user_copies = list(usermap.values())
+
+    current_sol_perp_price = vat.perp_oracles.get(0).price / PRICE_PRECISION  # type: ignore
+    for user in user_copies:
         user_total_spot_value = user.get_spot_market_asset_value()
+        print(f"user public key {user.user_public_key}")
+        print(f"user total spot value {user_total_spot_value}")
         # ignore users that are bankrupt, of which there should not be many
         if user_total_spot_value <= 0:
             continue
 
-        for spot_position in user.get_user_account().spot_positions:
+        print(user.get_user_account().spot_positions)
+        print(user.get_user_account().perp_positions)
+
+        # save the current user account state
+        saved_user_account = copy.deepcopy(user.get_user_account())
+
+        print("\n\n")
+        for i, spot_position in enumerate(saved_user_account.spot_positions):
+            print(f"spot position: {i}")
             # ignore borrows
-            if spot_position.scaled_balance < 0:
+            from driftpy.types import is_variant
+
+            if is_variant(spot_position.balance_type, "Borrow"):
                 continue
             spot_market_index = spot_position.market_index
+            precision = vat.spot_markets.get(spot_market_index).data.decimals  # type: ignore
 
-            # save the current user account state, and create a copy to force isolated margin upon
-            saved_user_account = copy.deepcopy(user.get_user_account())
+            # create a copy to force isolated margin upon
             fake_user_account = copy.deepcopy(user.get_user_account())
 
             # save the current oracle price, s.t. we can reset it after our calculations
             spot_oracle_pubkey = vat.spot_markets.get(spot_position.market_index).data.oracle  # type: ignore
             saved_price_data = vat.spot_oracles.get(spot_position.market_index)
             saved_price = saved_price_data.price
+            try:
+                # figure out what proportion of the user's collateral is in this spot market
+                spot_position_token_amount = user.get_token_amount(
+                    spot_position.market_index
+                )
+                print(f"spot position scaled balance {spot_position.scaled_balance}")
+                print(f"spot position token amount {spot_position_token_amount}")
+                print(
+                    f"spot pos normalized {spot_position_token_amount / (10 ** precision)}"
+                )
+                collateral_in_spot_asset_usd = (
+                    spot_position_token_amount / (10**precision)
+                ) * (saved_price / PRICE_PRECISION)
+                proportion_of_net_collateral = collateral_in_spot_asset_usd / (
+                    user_total_spot_value / QUOTE_PRECISION
+                )
 
-            # figure out what proportion of the user's collateral is in this spot market
-            collateral_in_spot_asset_usd = (
-                spot_position.scaled_balance / SPOT_BALANCE_PRECISION
-            ) * (saved_price / PRICE_PRECISION)
-            proportion_of_net_collateral = collateral_in_spot_asset_usd / (
-                user_total_spot_value / QUOTE_PRECISION
-            )
+                p = [
+                    pos
+                    for pos in fake_user_account.perp_positions
+                    if pos.market_index == 0
+                ][0]
+                perp_position = copy.deepcopy(p)
 
-            p = [
-                pos for pos in fake_user_account.perp_positions if pos.market_index == 0
-            ][0]
-            perp_position = copy.deepcopy(p)
+                # this shouldn't ever happen, but if it does, we'll skip this user
+                if proportion_of_net_collateral > 1:
+                    print("proportion of net collateral > 1")
+                    continue
 
-            # this shouldn't ever happen, but if it does, we'll skip this user
-            if proportion_of_net_collateral > 1:
-                continue
-
-            # anything less than 1% of their collateral is dust relative to the rest of the account, so it's negligibly small
-            if proportion_of_net_collateral < 0.01:
-                continue
-
-            # scale the perp position size by the proportion of net collateral to mock isolated margin
-            perp_position.base_asset_amount = int(
-                perp_position.base_asset_amount * proportion_of_net_collateral
-            )
-            perp_position.quote_asset_amount = int(
-                perp_position.quote_asset_amount * proportion_of_net_collateral
-            )
-
-            # if the position is so small that it's proportionally less than 1e-7 units of the asset, it's dust & negligible
-            if abs(perp_position.base_asset_amount) < 100:
-                continue
-
-            # replace the user's UserAccount with the mocked isolated margin account
-            fake_user_account.spot_positions = [copy.deepcopy(spot_position)]
-            fake_user_account.perp_positions = [copy.deepcopy(perp_position)]
-            user.account_subscriber.user_and_slot.data = fake_user_account
-
-            # set the oracle price to the price after an oracle_warp percent decrease
-            # it doesn't make sense to increase the collateral price, because nobody would ever get liquidated if their collateral went up in value
-            # our short / long numbers are evaluated based on the type of the perp position, which is...
-            shocked_price = int(current_sol_perp_price * (1 - (int(oracle_warp) / 100)))
-            user.drift_client.account_subscriber.cache["oracle_price_data"][
-                str(spot_oracle_pubkey)
-            ].price = shocked_price
-
-            # ...evaluated here
-            is_short = perp_position.base_asset_amount < 0
-
-            # get the notional value that we would liquidate at the shock_price
-            # users are liquidated to 100 "margin ratio units" above their maintenance margin requirements
-            shocked_margin_requirement = user.get_margin_requirement(
-                MarginCategory.MAINTENANCE, 100
-            )
-            shocked_spot_asset_value = user.get_spot_market_asset_value(
-                MarginCategory.MAINTENANCE, include_open_orders=True
-            )
-            shocked_upnl = user.get_unrealized_pnl(True, MarginCategory.MAINTENANCE)
-            shocked_total_collateral = user.get_total_collateral(
-                MarginCategory.MAINTENANCE
-            )
-
-            # if the user has more collateral than margin required, the position by definition cannot be in liquidation
-            if shocked_total_collateral >= shocked_margin_requirement:
-                continue
-
-            shocked_notional = (
-                shocked_margin_requirement - shocked_total_collateral
-            ) / QUOTE_PRECISION
-
-            # get the liquidation price of the weighted & aggregated SOL-PERP position after collateral price shock
-            shocked_liquidation_price = user.get_perp_liq_price(0) / PRICE_PRECISION
-
-            # reset the user object to the original state
-            user.drift_client.account_subscriber.cache["oracle_price_data"][
-                str(spot_oracle_pubkey)
-            ].price = saved_price
-            user.account_subscriber.user_and_slot.data = saved_user_account
-
-            # some forced isolated accounts will have such a tiny position that their liquidation price will be some super-tiny negative number
-            # in this case, we do not care, because the position size is totally negligible and that liquidation price will never be hit
-            if shocked_liquidation_price < 0:
-                continue
-
-            print(f"is short {is_short}")
-            print(f"user public key {user.user_public_key}")
-            print(f"spot market index {spot_market_index}")
-            print(f"margin requirement: {shocked_margin_requirement}")
-            print(f"spot asset value: {shocked_spot_asset_value}")
-            print(f"upnl: {shocked_upnl}")
-            print(f"total collateral: {shocked_total_collateral}")
-            print(f"notional: {shocked_notional}")
-            print(f"sol perp price {current_sol_perp_price}")
-            print(f"liquidation price {shocked_liquidation_price}")
-            print(f"proportion of net collateral {proportion_of_net_collateral}")
-            print(f"base asset amount {perp_position.base_asset_amount}")
-            print(
-                f"perp position value {(perp_position.base_asset_amount / BASE_PRECISION) * current_sol_perp_price}"
-            )
-
-            print("\n\n")
-
-            if is_short:
-                # if the position is short, and the liquidation price is lte the current price, the position is in liquidation
-                if shocked_liquidation_price <= current_sol_perp_price:
-                    short_liquidations.append(
-                        LiquidationInfo(
-                            spot_market_index=spot_market_index,
-                            user_public_key=user.user_public_key,
-                            notional_liquidated=shocked_notional,
-                            spot_asset_scaled_balance=spot_position.scaled_balance,
-                        )
+                # anything less than 1% of their collateral is dust relative to the rest of the account, so it's negligibly small
+                if proportion_of_net_collateral < 0.01:
+                    print(
+                        f"proportion of net collateral {proportion_of_net_collateral}"
                     )
-            else:
-                # similarly, if the position is long, and the liquidation price is gte the current price, the position is in liquidation
-                if shocked_liquidation_price >= current_sol_perp_price:
-                    long_liquidations.append(
-                        LiquidationInfo(
-                            spot_market_index=spot_market_index,
-                            user_public_key=user.user_public_key,
-                            notional_liquidated=shocked_notional,
-                            spot_asset_scaled_balance=spot_position.scaled_balance,
-                        )
+                    continue
+
+                # scale the perp position size by the proportion of net collateral to mock isolated margin
+                perp_position.base_asset_amount = int(
+                    perp_position.base_asset_amount * proportion_of_net_collateral
+                )
+                perp_position.quote_asset_amount = int(
+                    perp_position.quote_asset_amount * proportion_of_net_collateral
+                )
+
+                # if the position is so small that it's proportionally less than 1e-7 units of the asset, it's dust & negligible
+                if abs(perp_position.base_asset_amount) < 100:
+                    print(
+                        f"perp position base asset amount {perp_position.base_asset_amount}"
                     )
+                    continue
+
+                # replace the user's UserAccount with the mocked isolated margin account
+                fake_user_account.spot_positions = [copy.deepcopy(spot_position)]
+                fake_user_account.perp_positions = [copy.deepcopy(perp_position)]
+                user.account_subscriber.user_and_slot.data = fake_user_account
+
+                print(user.get_user_account().spot_positions)
+                print(user.get_user_account().perp_positions)
+
+                # set the oracle price to the price after an oracle_warp percent decrease
+                # it doesn't make sense to increase the collateral price, because nobody would ever get liquidated if their collateral went up in value
+                # our short / long numbers are evaluated based on the type of the perp position, which is...
+                shocked_price = int(
+                    current_sol_perp_price * (1 - (int(oracle_warp) / 100))
+                )
+                user.drift_client.account_subscriber.cache["oracle_price_data"][
+                    str(spot_oracle_pubkey)
+                ].price = int(shocked_price * PRICE_PRECISION)
+
+                # ...evaluated here
+                is_short = perp_position.base_asset_amount < 0
+
+                # get the notional value that we would liquidate at the shock_price
+                # users are liquidated to 100 "margin ratio units" above their maintenance margin requirements
+                shocked_margin_requirement = user.get_margin_requirement(
+                    MarginCategory.MAINTENANCE, 100
+                )
+
+                shocked_spot_asset_value = user.get_spot_market_asset_value(
+                    MarginCategory.MAINTENANCE, include_open_orders=True, strict=False
+                )
+                shocked_upnl = user.get_unrealized_pnl(
+                    True, MarginCategory.MAINTENANCE, strict=False
+                )
+
+                print(f"STREAMLIT spot asset value: {shocked_spot_asset_value}")
+                print(f"STREAMLIT upnl: {shocked_upnl}")
+
+                shocked_total_collateral = user.get_total_collateral(
+                    MarginCategory.MAINTENANCE, False
+                )
+
+                # if the user has more collateral than margin required, the position by definition cannot be in liquidation
+                if shocked_total_collateral >= shocked_margin_requirement:
+                    continue
+
+                shocked_notional = (
+                    shocked_margin_requirement - shocked_total_collateral
+                ) / QUOTE_PRECISION
+
+                # get the liquidation price of the weighted & aggregated SOL-PERP position after collateral price shock
+                print(f"get perp liq price")
+                shocked_liquidation_price = user.get_perp_liq_price(0) / PRICE_PRECISION
+
+                # some forced isolated accounts will have such a tiny position that their liquidation price will be some super-tiny negative number
+                # in this case, we do not care, because the position size is totally negligible and that liquidation price will never be hit
+                if shocked_liquidation_price < 0:
+                    continue
+
+                print(f"is short {is_short}")
+                print(f"user public key {user.user_public_key}")
+                print(f"spot market index {spot_market_index}")
+                print(f"margin requirement: {shocked_margin_requirement}")
+
+                print(f"streamlit total collateral: {shocked_total_collateral}")
+                print(f"notional: {shocked_notional}")
+                print(f"sol perp price {current_sol_perp_price}")
+                print(f"liquidation price {shocked_liquidation_price}")
+                print(f"proportion of net collateral {proportion_of_net_collateral}")
+                print(f"base asset amount {perp_position.base_asset_amount}")
+                print(
+                    f"perp position value {(perp_position.base_asset_amount / BASE_PRECISION) * current_sol_perp_price}"
+                )
+
+                print("\n\n")
+
+                if is_short:
+                    # if the position is short, and the liquidation price is lte the current price, the position is in liquidation
+                    if shocked_liquidation_price <= current_sol_perp_price:
+                        short_liquidations.append(
+                            LiquidationInfo(
+                                spot_market_index=spot_market_index,
+                                user_public_key=user.user_public_key,
+                                notional_liquidated=shocked_notional,
+                                spot_asset_scaled_balance=spot_position.scaled_balance,
+                            )
+                        )
+                else:
+                    # similarly, if the position is long, and the liquidation price is gte the current price, the position is in liquidation
+                    if shocked_liquidation_price >= current_sol_perp_price:
+                        long_liquidations.append(
+                            LiquidationInfo(
+                                spot_market_index=spot_market_index,
+                                user_public_key=user.user_public_key,
+                                notional_liquidated=shocked_notional,
+                                spot_asset_scaled_balance=spot_position.scaled_balance,
+                            )
+                        )
+            finally:
+                # reset the user object to the original state
+                user.drift_client.account_subscriber.cache["oracle_price_data"][
+                    str(spot_oracle_pubkey)
+                ].price = saved_price
+                user.account_subscriber.user_and_slot.data = saved_user_account
 
     print(len(long_liquidations))
     print(len(short_liquidations))

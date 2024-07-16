@@ -189,7 +189,9 @@ def aggregate_perps(vat: Vat, loop: AbstractEventLoop):
 
             # aggregate
             agg_perp.base_asset_amount += new_baa_adjusted
-            agg_perp.quote_asset_amount += perp_position.quote_asset_amount
+            agg_perp.quote_asset_amount += perp_position.quote_asset_amount * (
+                sol_margin_scalar / curr_margin_scalar
+            )
 
         if agg_perp.base_asset_amount == 0:
             return None
@@ -222,55 +224,10 @@ def aggregate_perps(vat: Vat, loop: AbstractEventLoop):
         if user is not None
     ]
 
-    user_keys = [user.user_public_key for user in aggregated_users]
+    aggregated_users = sorted(
+        aggregated_users,
+        key=lambda x: x.get_total_collateral(MarginCategory.MAINTENANCE)
+        + x.get_total_perp_position_value(MarginCategory.MAINTENANCE),
+    )
 
-    # list into dataframe (similar to get_usermap_df but simpler)
-    def prepare_for_df(user: DriftUser):
-        calcs = {
-            "spot_asset": user.get_net_spot_market_value(MarginCategory.INITIAL)
-            / QUOTE_PRECISION,
-            "net_v": get_collateral_composition(
-                user, MarginCategory.INITIAL, NUMBER_OF_SPOT
-            ),
-            "net_p": get_perp_liab_composition(
-                user, MarginCategory.INITIAL, NUMBER_OF_SPOT
-            ),
-        }
-
-        return calcs
-
-    pre_df_users = [prepare_for_df(user) for user in aggregated_users]
-    df = pd.DataFrame(pre_df_users, index=user_keys)
-
-    # isolated margin (stolen from get_matrix but with perp_market_inspect as 0)
-    def isolate(row):
-        calculations = [
-            (
-                f"aggregated_perp_long",
-                lambda v: (
-                    v / row["spot_asset"] * row["net_p"][0]
-                    if v > 0 and row["net_p"][0] > 0
-                    else 0
-                ),
-            ),
-            (
-                f"aggregated_perp_short",
-                lambda v: (
-                    v / row["spot_asset"] * row["net_p"][0]
-                    if v > 0 and row["net_p"][0] < 0
-                    else 0
-                ),
-            ),
-        ]
-
-        series_list = []
-        for suffix, func in calculations:
-            series = pd.Series([func(val)] for _, val in row["net_v"].items())
-            series.index = [f"spot_{x}_{suffix}" for x in series.index]
-            series_list.append(series)
-
-        return pd.concat(series_list)
-
-    df = pd.concat([df, df.apply(isolate, axis=1)], axis=1)
-
-    return (df, aggregated_users)
+    return aggregated_users
