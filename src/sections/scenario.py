@@ -23,8 +23,8 @@ def price_shock_plot(price_scenario_users: list[Any], oracle_distort: float):
     
     spot_bankrs = []
     for df in dfs:
-        spot_b_t1 = -(df[(df['spot_asset']<df['spot_liability']) & (df['net_usd_value']<0)])
-        spot_bankrs.append(-(spot_b_t1['spot_liability'] - spot_b_t1['spot_asset']).sum())
+        spot_b_t1 = (df[(df['spot_asset']<df['spot_liability']) & (df['net_usd_value']<0)])
+        spot_bankrs.append((spot_b_t1['spot_liability'] - spot_b_t1['spot_asset']).sum())
 
     xdf = [[-df[df['net_usd_value']<0]['net_usd_value'].sum() for df in dfs],
             spot_bankrs
