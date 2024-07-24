@@ -611,23 +611,23 @@ def get_liquidations(
     vat_copy = vat_deep_copy(vat)
 
     current_sol_perp_price = vat_copy.perp_oracles.get(0).price / PRICE_PRECISION  # type: ignore
+    sol_perp_oracle = vat_copy.perp_markets.get(0).data.amm.oracle # type: ignore
     for user in user_copies:
         user_total_spot_value = user.get_spot_market_asset_value()
-        print(f"user public key {user.user_public_key}")
-        print(f"user total spot value {user_total_spot_value}")
+        # print(f"user public key {user.user_public_key}")
+        # print(f"user total spot value {user_total_spot_value}")
         # ignore users that are bankrupt, of which there should not be many
         if user_total_spot_value <= 0:
             continue
 
-        print(user.get_user_account().spot_positions)
-        print(user.get_user_account().perp_positions)
+        # print(user.get_user_account().spot_positions)
+        # print(user.get_user_account().perp_positions)
 
         # save the current user account state
         saved_user_account = copy.deepcopy(user.get_user_account())
 
         print("\n\n")
         for i, spot_position in enumerate(saved_user_account.spot_positions):
-            print(f"spot position: {i}")
             # ignore borrows
             from driftpy.types import is_variant
 
@@ -648,11 +648,11 @@ def get_liquidations(
                 spot_position_token_amount = user.get_token_amount(
                     spot_position.market_index
                 )
-                print(f"spot position scaled balance {spot_position.scaled_balance}")
-                print(f"spot position token amount {spot_position_token_amount}")
-                print(
-                    f"spot pos normalized {spot_position_token_amount / (10 ** precision)}"
-                )
+                # print(f"spot position scaled balance {spot_position.scaled_balance}")
+                # print(f"spot position token amount {spot_position_token_amount}")
+                # print(
+                #     f"spot pos normalized {spot_position_token_amount / (10 ** precision)}"
+                # )
                 collateral_in_spot_asset_usd = (
                     spot_position_token_amount / (10**precision)
                 ) * (saved_price / PRICE_PRECISION)
@@ -674,9 +674,7 @@ def get_liquidations(
 
                 # anything less than 1% of their collateral is dust relative to the rest of the account, so it's negligibly small
                 if proportion_of_net_collateral < 0.01:
-                    print(
-                        f"proportion of net collateral {proportion_of_net_collateral}"
-                    )
+                    print(f"proportion of net collateral < 0.01")
                     continue
 
                 # scale the perp position size by the proportion of net collateral to mock isolated margin
@@ -689,9 +687,7 @@ def get_liquidations(
 
                 # if the position is so small that it's proportionally less than 1e-7 units of the asset, it's dust & negligible
                 if abs(perp_position.base_asset_amount) < 100:
-                    print(
-                        f"perp position base asset amount {perp_position.base_asset_amount}"
-                    )
+                    print(f"perp position base asset amount < 100")
                     continue
 
                 # replace the user's UserAccount with the mocked isolated margin account
@@ -699,18 +695,17 @@ def get_liquidations(
                 fake_user_account.perp_positions = [copy.deepcopy(perp_position)]
                 user.account_subscriber.user_and_slot.data = fake_user_account
 
-                print(user.get_user_account().spot_positions)
-                print(user.get_user_account().perp_positions)
+                # print(user.get_user_account().spot_positions)
+                # print(user.get_user_account().perp_positions)
 
                 # set the oracle price to the price after an oracle_warp percent decrease
                 # it doesn't make sense to increase the collateral price, because nobody would ever get liquidated if their collateral went up in value
                 # our short / long numbers are evaluated based on the type of the perp position, which is...
-                shocked_price = int(
-                    current_sol_perp_price * (1 - (int(oracle_warp) / 100))
-                )
+                shocked_price = max(saved_price * (1 - (int(oracle_warp) / 100)), 0)
+
                 user.drift_client.account_subscriber.cache["oracle_price_data"][
                     str(spot_oracle_pubkey)
-                ].price = int(shocked_price * PRICE_PRECISION)
+                ].price = shocked_price
 
                 # ...evaluated here
                 is_short = perp_position.base_asset_amount < 0
@@ -728,8 +723,8 @@ def get_liquidations(
                     True, MarginCategory.MAINTENANCE, strict=False
                 )
 
-                print(f"STREAMLIT spot asset value: {shocked_spot_asset_value}")
-                print(f"STREAMLIT upnl: {shocked_upnl}")
+                # print(f"STREAMLIT spot asset value: {shocked_spot_asset_value}")
+                # print(f"STREAMLIT upnl: {shocked_upnl}")
 
                 shocked_total_collateral = user.get_total_collateral(
                     MarginCategory.MAINTENANCE, False
@@ -752,26 +747,29 @@ def get_liquidations(
                 if shocked_liquidation_price < 0:
                     continue
 
-                print(f"is short {is_short}")
-                print(f"user public key {user.user_public_key}")
-                print(f"spot market index {spot_market_index}")
-                print(f"margin requirement: {shocked_margin_requirement}")
+                # print(f"is short {is_short}")
+                # print(f"user public key {user.user_public_key}")
+                # print(f"spot market index {spot_market_index}")
+                # print(f"margin requirement: {shocked_margin_requirement}")
 
-                print(f"streamlit total collateral: {shocked_total_collateral}")
+                print(f"total collateral: {shocked_total_collateral}")
+                print(f"spot market index: {spot_position.market_index}")
                 print(f"notional: {shocked_notional}")
+                print(f"shocked price: {shocked_price}")
                 print(f"sol perp price {current_sol_perp_price}")
                 print(f"liquidation price {shocked_liquidation_price}")
+                print(f"in liquidation: {user.can_be_liquidated()}")
                 print(f"proportion of net collateral {proportion_of_net_collateral}")
-                print(f"base asset amount {perp_position.base_asset_amount}")
-                print(
-                    f"perp position value {(perp_position.base_asset_amount / BASE_PRECISION) * current_sol_perp_price}"
-                )
+                # print(f"base asset amount {perp_position.base_asset_amount}")
+                # print(
+                #     f"perp position value {(perp_position.base_asset_amount / BASE_PRECISION) * current_sol_perp_price}"
+                # )
 
                 print("\n\n")
 
                 if is_short:
                     # if the position is short, and the liquidation price is lte the current price, the position is in liquidation
-                    if shocked_liquidation_price <= current_sol_perp_price:
+                    if user.can_be_liquidated():
                         short_liquidations.append(
                             LiquidationInfo(
                                 spot_market_index=spot_market_index,
@@ -782,7 +780,7 @@ def get_liquidations(
                         )
                 else:
                     # similarly, if the position is long, and the liquidation price is gte the current price, the position is in liquidation
-                    if shocked_liquidation_price >= current_sol_perp_price:
+                    if user.can_be_liquidated():
                         long_liquidations.append(
                             LiquidationInfo(
                                 spot_market_index=spot_market_index,
@@ -810,8 +808,8 @@ def get_liquidations(
         original_oracle = original_spot_oracles.get(key, None)
         print(f"[ORIGINAL] market index: {key}, price: {original_oracle.price}")
         if val.price != original_oracle.price:
-            assert False, f"DOES NOT MATCH market index: {key}, price: {val.price}, original price: {original_oracle.price}"
+            assert False, f"[DOES NOT MATCH] market index: {key}, price: {val.price}, original price: {original_oracle.price}"
         else:
-            print(f"market index: {key}, price: {val.price}, original price: {original_oracle.price}")
+            print(f"[MATCHES] market index: {key}, price: {val.price}, original price: {original_oracle.price}")
 
     return long_liquidations, short_liquidations
