@@ -1,0 +1,10 @@
+{
+    "python.linting.enabled": true,
+    "python.linting.mypyEnabled": true,
+    "python.linting.mypyArgs": [
+        "--ignore-missing-imports",
+        "--strict"
+    ],
+    "python.linting.pylintEnabled": true,  // Optional: Enables pylint
+    "python.linting.flake8Enabled": true   // Optional: Enables flake8
+}

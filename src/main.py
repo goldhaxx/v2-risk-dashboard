@@ -109,7 +109,7 @@ def main():
 
     env = st.sidebar.radio("Environment:", ["prod", "dev"])
 
-    source = st.sidebar.radio("Pickle Source:" , ["local", "server"])
+    source = st.sidebar.radio("Source:" , ["local", "remote"])
 
     def query_string_callback():
         st.query_params["tab"] = st.session_state.query_key

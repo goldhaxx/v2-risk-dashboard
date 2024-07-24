@@ -23,7 +23,7 @@ from driftpy.constants.numeric_constants import (
 )
 
 from sections.asset_liab_matrix import get_matrix, NUMBER_OF_SPOT  # type: ignore
-from utils import aggregate_perps, vat_deep_copy, drift_user_deep_copy
+from utils import aggregate_perps, drift_client_deep_copy, vat_deep_copy, drift_user_deep_copy
 
 
 @dataclass
@@ -103,7 +103,10 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
         open_interest += oi
     print(open_interest)
 
+    import time
+    start = time.time()
     aggregated_users = aggregate_perps(vat, loop)
+    print(f"aggregated users in {time.time() - start}")
     # aggregated_users: list[DriftUser]
     # if "agg_perps" not in st.session_state:
     #     aggregated_users = aggregate_perps(vat, loop)
@@ -598,8 +601,13 @@ def get_liquidations(
 ) -> tuple[list[LiquidationInfo], list[LiquidationInfo]]:
     long_liquidations: list[LiquidationInfo] = []
     short_liquidations: list[LiquidationInfo] = []
+    import time
+    print("starting liquidations")
+    start = time.time()
 
-    user_copies = [drift_user_deep_copy(user) for user in aggregated_users]
+    drift_client = drift_client_deep_copy(vat.drift_client)
+    user_copies = [drift_user_deep_copy(user, drift_client) for user in aggregated_users]
+    print(f"deep copied users in {time.time() - start}")
     vat_copy = vat_deep_copy(vat)
 
     current_sol_perp_price = vat_copy.perp_oracles.get(0).price / PRICE_PRECISION  # type: ignore
@@ -801,6 +809,9 @@ def get_liquidations(
         print(f"[COPY] market index: {key}, price: {val.price}")
         original_oracle = original_spot_oracles.get(key, None)
         print(f"[ORIGINAL] market index: {key}, price: {original_oracle.price}")
-        assert val.price == original_oracle.price, f"DOES NOT MATCH market index: {key}, price: {val.price}, original price: {original_oracle.price}"
+        if val.price != original_oracle.price:
+            assert False, f"DOES NOT MATCH market index: {key}, price: {val.price}, original price: {original_oracle.price}"
+        else:
+            print(f"market index: {key}, price: {val.price}, original price: {original_oracle.price}")
 
     return long_liquidations, short_liquidations

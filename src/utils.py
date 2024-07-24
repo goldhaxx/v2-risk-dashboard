@@ -234,6 +234,7 @@ def aggregate_perps(vat: Vat, loop: AbstractEventLoop):
 
 import copy
 from driftpy.account_subscription_config import AccountSubscriptionConfig
+from driftpy.accounts.types import DataAndSlot
 
 def drift_client_deep_copy(dc: DriftClient) -> DriftClient:
     from solana.rpc.async_api import AsyncClient
@@ -242,16 +243,16 @@ def drift_client_deep_copy(dc: DriftClient) -> DriftClient:
     oracle_price_data = {}
     state_account = None
     for market in dc.get_perp_market_accounts():
-        perp_markets.append(copy.deepcopy(market))
+        perp_markets.append(DataAndSlot(0, copy.deepcopy(market)))
     
     for market in dc.get_spot_market_accounts():
-        spot_markets.append(copy.deepcopy(market))
+        spot_markets.append(DataAndSlot(0, copy.deepcopy(market)))
 
     for pubkey, oracle in dc.account_subscriber.cache["oracle_price_data"].items():
         oracle_price_data[copy.deepcopy(pubkey)] = copy.deepcopy(oracle)
 
     if dc.get_state_account() is not None:
-        state_account = copy.deepcopy(dc.get_state_account())
+        state_account = copy.deepcopy(dc.account_subscriber.get_state_account_and_slot())
 
     new_wallet = copy.deepcopy(dc.wallet)
     new_connection = AsyncClient(copy.deepcopy(dc.connection._provider.endpoint_uri))
@@ -262,24 +263,26 @@ def drift_client_deep_copy(dc: DriftClient) -> DriftClient:
         account_subscription=AccountSubscriptionConfig("cached"),
     )
 
-    new_drift_client.account_subscriber.cache["perp_markets"] = sorted(perp_markets, key=lambda x: x.market_index)
-    new_drift_client.account_subscriber.cache["spot_markets"] = sorted(spot_markets, key=lambda x: x.market_index)
+    new_drift_client.account_subscriber.cache["perp_markets"] = sorted(perp_markets, key=lambda x: x.data.market_index)
+    new_drift_client.account_subscriber.cache["spot_markets"] = sorted(spot_markets, key=lambda x: x.data.market_index)
     new_drift_client.account_subscriber.cache["oracle_price_data"] = oracle_price_data
     new_drift_client.account_subscriber.cache["state_account"] = state_account
 
     return new_drift_client
 
-def drift_user_deep_copy(user: DriftUser) -> DriftUser:
+def drift_user_deep_copy(user: DriftUser, drift_client: DriftClient) -> DriftUser:
+    user_account_and_slot = copy.deepcopy(user.get_user_account_and_slot())
     new_user = DriftUser(
-        drift_client_deep_copy(user.drift_client),
+        drift_client,
         copy.deepcopy(user.user_public_key),
         account_subscription=AccountSubscriptionConfig("cached"),
     )
+    new_user.account_subscriber.user_and_slot = user_account_and_slot
     return new_user
 
-def drift_user_stats_deep_copy(stats: DriftUserStats) -> DriftUserStats:
+def drift_user_stats_deep_copy(stats: DriftUserStats, drift_client: DriftClient) -> DriftUserStats:
     new_user_stats = DriftUserStats(
-        drift_client_deep_copy(stats.drift_client),
+        drift_client,
         copy.deepcopy(stats.user_public_key),
         config=UserStatsSubscriptionConfig(
             initial_data=copy.deepcopy(stats.get_account_and_slot())
@@ -289,10 +292,12 @@ def drift_user_stats_deep_copy(stats: DriftUserStats) -> DriftUserStats:
     return new_user_stats
 
 def vat_deep_copy(vat: Vat) -> Vat:
+    import time
+    start = time.time()
     new_drift_client = drift_client_deep_copy(vat.drift_client)
-    
+    print(f"copied drift client in {time.time() - start}")
+
     new_user_map = UserMap(UserMapConfig(new_drift_client, UserMapWebsocketConfig()))
-    new_user_stats_map = UserStatsMap(UserStatsMapConfig(new_drift_client))
     new_spot_map = MarketMap(
         MarketMapConfig(
             new_drift_client.program, MarketType.Spot(), MarketMapWebsocketConfig(), new_drift_client.connection
@@ -306,25 +311,32 @@ def vat_deep_copy(vat: Vat) -> Vat:
     new_perp_oracles = {}
     new_spot_oracles = {}
 
-    for pubkey, user in vat.users.user_map.items():
-        new_user_map.user_map[str(copy.deepcopy(pubkey))] = drift_user_deep_copy(user)
-
-    for pubkey, user_stats in vat.user_stats.user_stats_map.items():
-        new_user_stats_map[str(copy.deepcopy(pubkey))] = drift_user_stats_deep_copy(user_stats)
-
-    for pubkey, market in vat.perp_markets.market_map.items():
-        new_perp_map.market_map[copy.deepcopy(pubkey)] = copy.deepcopy(market)
-
-    for pubkey, market in vat.spot_markets.market_map.items():
-        new_spot_map.market_map[copy.deepcopy(pubkey)] = copy.deepcopy(market)
-
+    start = time.time()
     for market_index, oracle in vat.perp_oracles.items():
         new_perp_oracles[copy.deepcopy(market_index)] = copy.deepcopy(oracle)
+    print(f"copied perp oracles in {time.time() - start}")
 
+    start = time.time()
     for market_index, oracle in vat.spot_oracles.items():
         new_spot_oracles[copy.deepcopy(market_index)] = copy.deepcopy(oracle)
+    print(f"copied spot oracles in {time.time() - start}")
 
-    new_vat = Vat(new_drift_client, new_user_map, new_user_stats_map, new_spot_map, new_perp_map)
+    start = time.time()
+    for pubkey, market in vat.perp_markets.market_map.items():
+        new_perp_map.market_map[copy.deepcopy(pubkey)] = copy.deepcopy(market)
+    print(f"copied perp markets in {time.time() - start}")
+
+    start = time.time()
+    for pubkey, market in vat.spot_markets.market_map.items():
+        new_spot_map.market_map[copy.deepcopy(pubkey)] = copy.deepcopy(market)
+    print(f"copied spot markets in {time.time() - start}")
+
+    start = time.time()
+    for pubkey, user in vat.users.user_map.items():
+        new_user_map.user_map[str(copy.deepcopy(pubkey))] = drift_user_deep_copy(user, new_drift_client)
+    print(f"copied users in {time.time() - start}")
+
+    new_vat = Vat(new_drift_client, new_user_map, vat.user_stats, new_spot_map, new_perp_map)
     new_vat.perp_oracles = new_perp_oracles
     new_vat.spot_oracles = new_spot_oracles
 
