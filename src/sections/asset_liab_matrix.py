@@ -183,6 +183,11 @@ def get_matrix(
 def asset_liab_matrix_page(
     loop: AbstractEventLoop, vat: Vat, drift_client: DriftClient, env="mainnet"
 ):
+    print(f"[ASSET-LIAB-MATRIX] context set?: {st.session_state['context']}")
+    if st.session_state["context"] == False:
+        st.write("Please load dashboard before viewing this page")
+        return
+    
     mode = st.selectbox("Mode", options, format_func=lambda x: labels[x])
 
     if mode is None:

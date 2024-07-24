@@ -191,6 +191,11 @@ def plot_liquidation_curves(liquidations_long, liquidations_short, market_price_
 
 
 def plot_liquidation_curve(vat: Vat):
+    print(f"[LIQUIDATIONS] context set?: {st.session_state['context']}")
+    if st.session_state["context"] == False:
+        st.write("Please load dashboard before viewing this page")
+        return
+    
     st.write("Liquidation Curves")
 
     default_index = list(options.keys()).index("SOL-PERP")

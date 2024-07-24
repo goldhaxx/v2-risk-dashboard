@@ -21,8 +21,9 @@ from driftpy.drift_client import DriftClient
 from driftpy.account_subscription_config import AccountSubscriptionConfig
 
 from health_utils import *
+from cache import get_cached_asset_liab_dfs
 from utils import load_newest_files, load_vat, clear_local_pickles
-from sections.asset_liab_matrix import asset_liab_matrix_page
+from sections.asset_liab_matrix import asset_liab_matrix_page, get_matrix
 from sections.ob import ob_cmp_page
 from sections.scenario import plot_page
 from sections.liquidation_curves import plot_liquidation_curve
@@ -75,16 +76,40 @@ async def setup_context(dc: DriftClient, loop: AbstractEventLoop, env):
 
         st.session_state["margin"] = tuple(margin)
         st.session_state["asset_liab_data"] = tuple(levs), user_keys
-    st.session_state["context"] = True
     print(f"dashboard ready in: {time.time() - start_dashboard_ready}")
 
+def setup_context_local(dc: DriftClient, loop: AbstractEventLoop, env):
+    vat: Vat
+    if "vat" not in st.session_state:
+        newest_snapshot = load_newest_files(os.getcwd() + "/pickles")
+
+        start_load_vat = time.time()
+        vat = loop.run_until_complete(load_vat(dc, newest_snapshot, loop, env))
+        st.session_state["vat"] = vat
+        print(f"loaded vat in {time.time() - start_load_vat}")
+    else:
+        vat = st.session_state["vat"]
+
+    if "asset_liab_data" not in st.session_state:
+        st.session_state["asset_liab_data"] = get_cached_asset_liab_dfs(dc, vat, loop)
+
+    if "margin" not in st.session_state:
+        start = time.time()
+        st.session_state["margin"] = get_matrix(loop, vat, dc)
+        print(f"loaded matrix in {time.time() - start}")
+
+    st.session_state["context"] = True
 
 def main():
+    if "context" not in st.session_state:
+        st.session_state["context"] = False
     st.set_page_config(layout="wide")
 
     query_index = 0
 
     env = st.sidebar.radio("Environment:", ["prod", "dev"])
+
+    source = st.sidebar.radio("Pickle Source:" , ["local", "server"])
 
     def query_string_callback():
         st.query_params["tab"] = st.session_state.query_key
@@ -136,13 +161,16 @@ def main():
             md = st.empty()
             md.markdown("`Loading dashboard, do not leave this page`")
             if st.session_state["context"] == False:
-                loop.run_until_complete(setup_context(drift_client, loop, env))
+                if source.lower() == "local":
+                    setup_context_local(drift_client, loop, env)
+                else:
+                    loop.run_until_complete(setup_context(drift_client, loop, env))
+            st.session_state["context"] = True
             md.markdown("`Dashboard ready!`")
 
     st.sidebar.button("Start Dashboard", on_click=func)
 
     loop: AbstractEventLoop = asyncio.new_event_loop()
-    st.session_state["context"] = False
 
     if tab.lower() == "welcome":
         st.header("Welcome to the Drift v2 Risk Analytics Dashboard!")

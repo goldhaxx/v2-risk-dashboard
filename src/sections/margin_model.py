@@ -23,7 +23,7 @@ from driftpy.constants.numeric_constants import (
 )
 
 from sections.asset_liab_matrix import get_matrix, NUMBER_OF_SPOT  # type: ignore
-from utils import aggregate_perps
+from utils import aggregate_perps, vat_deep_copy, drift_user_deep_copy
 
 
 @dataclass
@@ -80,6 +80,11 @@ index_options.update(
 
 
 def margin_model(loop: AbstractEventLoop, dc: DriftClient):
+    print(f"[MARGIN-MODEL] context set?: {st.session_state['context']}")
+    if st.session_state["context"] == False:
+        st.write("Please load dashboard before viewing this page")
+        return
+    
     st.header("Margin Model")
     if "vat" not in st.session_state:
         st.write("No Vat loaded.")
@@ -106,12 +111,12 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
     # else:
     #     aggregated_users = st.session_state["agg_perps"]
 
-    spot_df: pd.DataFrame
-    if "spot_df" not in st.session_state:
-        spot_df = get_spot_df(vat.spot_markets.values(), vat)
-        st.session_state["spot_df"] = spot_df
-    else:
-        spot_df = st.session_state["spot_df"]
+    # spot_df: pd.DataFrame
+    # if "spot_df" not in st.session_state:
+    spot_df = get_spot_df(vat.spot_markets.values(), vat)
+        # st.session_state["spot_df"] = spot_df
+    # else:
+        # spot_df = st.session_state["spot_df"]
 
     stable_df = spot_df[spot_df.index.isin(stables)]
 
@@ -147,7 +152,7 @@ def margin_model(loop: AbstractEventLoop, dc: DriftClient):
     else:
         margin_df = st.session_state["margin"][1]
         res = st.session_state["margin"][0]
-
+    
     spot_df["all_liabilities"] = spot_df["symbol"].map(res["all_liabilities"])
     spot_df["all_liabilities"] = (
         spot_df["all_liabilities"].str.replace(r"[$,]", "", regex=True).astype(float)
@@ -594,22 +599,10 @@ def get_liquidations(
     long_liquidations: list[LiquidationInfo] = []
     short_liquidations: list[LiquidationInfo] = []
 
-    from driftpy.account_subscription_config import AccountSubscriptionConfig
-    from driftpy.user_map.user_map import UserMap
-    from driftpy.user_map.user_map_config import UserMapConfig, WebsocketConfig
+    user_copies = [drift_user_deep_copy(user) for user in aggregated_users]
+    vat_copy = vat_deep_copy(vat)
 
-    usermap = UserMap(UserMapConfig(vat.drift_client, WebsocketConfig()))
-    for user in aggregated_users:
-        loop.run_until_complete(
-            usermap.add_pubkey(
-                copy.deepcopy(user.user_public_key),
-                copy.deepcopy(user.get_user_account_and_slot()),
-            )
-        )
-
-    user_copies = list(usermap.values())
-
-    current_sol_perp_price = vat.perp_oracles.get(0).price / PRICE_PRECISION  # type: ignore
+    current_sol_perp_price = vat_copy.perp_oracles.get(0).price / PRICE_PRECISION  # type: ignore
     for user in user_copies:
         user_total_spot_value = user.get_spot_market_asset_value()
         print(f"user public key {user.user_public_key}")
@@ -633,14 +626,14 @@ def get_liquidations(
             if is_variant(spot_position.balance_type, "Borrow"):
                 continue
             spot_market_index = spot_position.market_index
-            precision = vat.spot_markets.get(spot_market_index).data.decimals  # type: ignore
+            precision = vat_copy.spot_markets.get(spot_market_index).data.decimals  # type: ignore
 
             # create a copy to force isolated margin upon
             fake_user_account = copy.deepcopy(user.get_user_account())
 
             # save the current oracle price, s.t. we can reset it after our calculations
-            spot_oracle_pubkey = vat.spot_markets.get(spot_position.market_index).data.oracle  # type: ignore
-            saved_price_data = vat.spot_oracles.get(spot_position.market_index)
+            spot_oracle_pubkey = vat_copy.spot_markets.get(spot_position.market_index).data.oracle  # type: ignore
+            saved_price_data = vat_copy.spot_oracles.get(spot_position.market_index)
             saved_price = saved_price_data.price
             try:
                 # figure out what proportion of the user's collateral is in this spot market
@@ -796,7 +789,18 @@ def get_liquidations(
                     str(spot_oracle_pubkey)
                 ].price = saved_price
                 user.account_subscriber.user_and_slot.data = saved_user_account
+                vat_copy.spot_oracles[spot_position.market_index] = saved_price_data
 
     print(len(long_liquidations))
     print(len(short_liquidations))
+
+    original_spot_oracles = copy.deepcopy(vat.spot_oracles)
+    current_spot_oracles = copy.deepcopy(vat_copy.spot_oracles)
+    
+    for key, val in current_spot_oracles.items():
+        print(f"[COPY] market index: {key}, price: {val.price}")
+        original_oracle = original_spot_oracles.get(key, None)
+        print(f"[ORIGINAL] market index: {key}, price: {original_oracle.price}")
+        assert val.price == original_oracle.price, f"DOES NOT MATCH market index: {key}, price: {val.price}, original price: {original_oracle.price}"
+
     return long_liquidations, short_liquidations
