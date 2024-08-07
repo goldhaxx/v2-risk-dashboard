@@ -162,7 +162,9 @@ def aggregate_perps(vat: Vat, loop: AbstractEventLoop):
         agg_perp = PerpPosition(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)
         sol_price = vat.perp_oracles.get(0).price
         user_account = user.get_user_account()
-        sol_market = vat.perp_markets.get(0).data
+        prev_tc = user.get_total_collateral()
+        unsettled_funding = user.get_unrealized_funding_pnl()
+        sol_market: PerpMarketAccount = vat.perp_markets.get(0).data
         for perp_position in user_account.perp_positions:
             if perp_position.base_asset_amount == 0:
                 continue
@@ -181,17 +183,21 @@ def aggregate_perps(vat: Vat, loop: AbstractEventLoop):
 
             # simple price conversion
             exchange_rate = sol_price / asset_price
-            exchange_rate_normalized = exchange_rate / PRICE_PRECISION
+            exchange_rate_normalized = exchange_rate
             new_baa = perp_position.base_asset_amount * exchange_rate_normalized
 
             # apply margin ratio transofmr
             new_baa_adjusted = new_baa * (sol_margin_scalar / curr_margin_scalar)
 
             # aggregate
+            if new_baa_adjusted > 0:
+                agg_perp.last_cumulative_funding_rate = sol_market.amm.cumulative_funding_rate_long
+            else:
+                agg_perp.last_cumulative_funding_rate = sol_market.amm.cumulative_funding_rate_short
             agg_perp.base_asset_amount += new_baa_adjusted
             agg_perp.quote_asset_amount += perp_position.quote_asset_amount * (
                 sol_margin_scalar / curr_margin_scalar
-            )
+            ) + unsettled_funding
 
         if agg_perp.base_asset_amount == 0:
             return None
@@ -201,6 +207,12 @@ def aggregate_perps(vat: Vat, loop: AbstractEventLoop):
         ds = user.account_subscriber.user_and_slot
         ds.data = user_account
         user.account_subscriber.user_and_slot = ds
+        post_tc = user.get_total_collateral()
+
+        # todo: add invariant to check near-zero delta in pre/post total_collateral
+        # if prev_tc != post_tc:
+        #     import pdb; pdb.set_trace()
+
         return user
 
     users_list = list(vat.users.values())
