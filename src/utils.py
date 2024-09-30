@@ -2,41 +2,23 @@ import os
 from typing import Optional
 
 from driftpy.drift_client import DriftClient
-from driftpy.pickle.vat import Vat
-
-from driftpy.user_map.user_map_config import (
-    UserMapConfig,
-    UserStatsMapConfig,
-    WebsocketConfig as UserMapWebsocketConfig,
-)
-from driftpy.user_map.user_map import UserMap
-from driftpy.user_map.userstats_map import UserStatsMap
-
+from driftpy.drift_user import DriftUser
+from driftpy.market_map.market_map import MarketMap
 from driftpy.market_map.market_map_config import (
-    MarketMapConfig,
     WebsocketConfig as MarketMapWebsocketConfig,
 )
-from driftpy.market_map.market_map import MarketMap
-
-from driftpy.types import MarketType
-from driftpy.drift_user import DriftUser
+from driftpy.market_map.market_map_config import MarketMapConfig
 from driftpy.math.margin import MarginCategory
+from driftpy.pickle.vat import Vat
+from driftpy.types import MarketType
+from driftpy.user_map.user_map import UserMap
+from driftpy.user_map.user_map_config import (
+    WebsocketConfig as UserMapWebsocketConfig,
+)
+from driftpy.user_map.user_map_config import UserMapConfig
+from driftpy.user_map.user_map_config import UserStatsMapConfig
+from driftpy.user_map.userstats_map import UserStatsMap
 
-def get_init_health(user: DriftUser):
-        if user.is_being_liquidated():
-            return 0
-
-        total_collateral = user.get_total_collateral(MarginCategory.INITIAL)
-        maintenance_margin_req = user.get_margin_requirement(MarginCategory.INITIAL)
-
-        if maintenance_margin_req == 0 and total_collateral >= 0:
-            return 100
-        elif total_collateral <= 0:
-            return 0
-        else:
-            return round(
-                min(100, max(0, (1 - maintenance_margin_req / total_collateral) * 100))
-            )
 
 def to_financial(num):
     num_str = str(num)
