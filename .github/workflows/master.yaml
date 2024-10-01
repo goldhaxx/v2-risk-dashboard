@@ -15,8 +15,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@master
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_NON_PROD }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY_NON_PROD }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY_PROD }}
           aws-region: "eu-west-1"
 
       - name: Log in to Amazon ECR
@@ -49,8 +49,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@master
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_NON_PROD }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY_NON_PROD }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY_PROD }}
           aws-region: "eu-west-1"
 
       - name: Log in to Amazon ECR
