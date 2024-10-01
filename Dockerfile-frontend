@@ -4,6 +4,9 @@ WORKDIR /app
 
 COPY . /app
 
+# Install necessary build tools and Python headers
+RUN apt-get update && apt-get install -y gcc python3-dev
+
 # Install any needed packages specified in requirements.txt
 RUN pip install --trusted-host pypi.python.org -r requirements.txt
 
