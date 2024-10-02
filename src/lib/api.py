@@ -1,10 +1,14 @@
+import os
 from typing import Optional
 
+from dotenv import load_dotenv
 import pandas as pd
 import requests
 
 
-BASE_URL = "http://localhost:8000"
+load_dotenv()
+
+BASE_URL = os.environ["BACKEND_URL"]
 
 
 def api(
