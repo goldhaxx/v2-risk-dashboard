@@ -1,71 +1,20 @@
-import asyncio
-from asyncio import AbstractEventLoop
 from collections import defaultdict
-import os
-import time
 
-from anchorpy import Wallet
-from driftpy.account_subscription_config import AccountSubscriptionConfig
-from driftpy.constants.numeric_constants import BASE_PRECISION
-from driftpy.constants.numeric_constants import PRICE_PRECISION
-from driftpy.drift_client import DriftClient
-from driftpy.pickle.vat import Vat
-from lib.page import RPC_STATE_KEY
-from lib.page import VAT_STATE_KEY
+from lib.api import api
 import numpy as np
-import plotly.graph_objects as go  # type: ignore
-from solana.rpc.async_api import AsyncClient
+import plotly.graph_objects as go
 import streamlit as st
-
-from utils import load_newest_files
-from utils import load_vat
 
 
 options = [0, 1, 2]
 labels = ["SOL-PERP", "BTC-PERP", "ETH-PERP"]
 
 
-def get_liquidation_curve(vat: Vat, market_index: int):
-    liquidations_long: list[tuple[float, float]] = []
-    liquidations_short: list[tuple[float, float]] = []
-    market_price = vat.perp_oracles.get(market_index)
-    market_price_ui = market_price.price / PRICE_PRECISION  # type: ignore
-    for user in vat.users.user_map.values():
-        perp_position = user.get_perp_position(market_index)
-        if perp_position is not None:
-            liquidation_price = user.get_perp_liq_price(market_index)
-            if liquidation_price is not None:
-                liquidation_price_ui = liquidation_price / PRICE_PRECISION
-                position_size = abs(perp_position.base_asset_amount) / BASE_PRECISION
-                position_notional = position_size * market_price_ui
-                is_zero = round(position_notional) == 0
-                is_short = perp_position.base_asset_amount < 0
-                is_long = perp_position.base_asset_amount > 0
-                if is_zero:
-                    continue
-                if is_short and liquidation_price_ui > market_price_ui:
-                    liquidations_short.append((liquidation_price_ui, position_notional))
-                elif is_long and liquidation_price_ui < market_price_ui:
-                    liquidations_long.append((liquidation_price_ui, position_notional))
-                else:
-                    pass
-                    # print(f"liquidation price for user {user.user_public_key} is {liquidation_price_ui} and market price is {market_price_ui} - is_short: {is_short} - size {position_size} - notional {position_notional}")
+def plot_liquidation_curves(liquidation_data):
+    liquidations_long = liquidation_data["liquidations_long"]
+    liquidations_short = liquidation_data["liquidations_short"]
+    market_price_ui = liquidation_data["market_price_ui"]
 
-    liquidations_long.sort(key=lambda x: x[0])
-    liquidations_short.sort(key=lambda x: x[0])
-
-    # for (price, size) in liquidations_long:
-    #     print(f"Long liquidation for {size} @ {price}")
-
-    # for (price, size) in liquidations_short:
-    #     print(f"Short liquidation for {size} @ {price}")
-
-    return plot_liquidation_curves(
-        liquidations_long, liquidations_short, market_price_ui
-    )
-
-
-def plot_liquidation_curves(liquidations_long, liquidations_short, market_price_ui):
     def filter_outliers(
         liquidations, upper_bound_multiplier=2.0, lower_bound_multiplier=0.5
     ):
@@ -91,8 +40,6 @@ def plot_liquidation_curves(liquidations_long, liquidations_short, market_price_
         cumulative_notional = np.cumsum(
             [aggregated_data[price] for price in sorted_prices]
         )
-        # if reverse:
-        #     cumulative_notional = cumulative_notional[::-1]  # Reverse cumulative sum for descending plots
         return sorted_prices, cumulative_notional
 
     # Filter outliers based on defined criteria
@@ -112,11 +59,7 @@ def plot_liquidation_curves(liquidations_long, liquidations_short, market_price_
     )
     short_prices, short_cum_notional = prepare_data_for_plot(aggregated_short)
 
-    print(sum(long_cum_notional))
-    print(sum(short_cum_notional))
-
     if not long_prices or not short_prices:
-        print("No data available for plotting.")
         return None
 
     # Create Plotly figures
@@ -164,20 +107,6 @@ def plot_liquidation_curves(liquidations_long, liquidations_short, market_price_
 
 
 def plot_liquidation_curve():  # (vat: Vat):
-    rpc = st.session_state[RPC_STATE_KEY]
-    loop: AbstractEventLoop = asyncio.new_event_loop()
-    drift_client = DriftClient(
-        AsyncClient(rpc),
-        Wallet.dummy(),
-        account_subscription=AccountSubscriptionConfig("cached"),
-    )
-    loop: AbstractEventLoop = asyncio.new_event_loop()
-    newest_snapshot = load_newest_files(os.getcwd() + "/pickles")
-    start_load_vat = time.time()
-    vat = loop.run_until_complete(load_vat(drift_client, newest_snapshot))
-    st.session_state["vat"] = vat
-    st.write(f"loaded vat in {time.time() - start_load_vat}")
-    st.session_state[VAT_STATE_KEY] = vat
     st.write("Liquidation Curves")
 
     market_index = st.selectbox(
@@ -189,7 +118,10 @@ def plot_liquidation_curve():  # (vat: Vat):
     if market_index is None:
         market_index = 0
 
-    (long_fig, short_fig) = get_liquidation_curve(vat, market_index)
+    liquidation_data = api(
+        "liquidation", "liquidation-curve", str(market_index), as_json=True
+    )
+    (long_fig, short_fig) = plot_liquidation_curves(liquidation_data)
 
     long_col, short_col = st.columns([1, 1])
 

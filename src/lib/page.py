@@ -3,17 +3,22 @@ Common page functionality
 """
 
 import asyncio
+from asyncio import AbstractEventLoop
+from datetime import datetime
 import os
 import time
-from asyncio import AbstractEventLoop
 
-import streamlit as st
 from anchorpy import Wallet
 from driftpy.account_subscription_config import AccountSubscriptionConfig
 from driftpy.drift_client import DriftClient
+import humanize
+from lib.api import api
 from solana.rpc.async_api import AsyncClient
+import streamlit as st
 
-from utils import load_newest_files, load_vat
+from utils import load_newest_files
+from utils import load_vat
+
 
 RPC_STATE_KEY = "rpc_url"
 NETWORK_STATE_KEY = "network"
@@ -42,6 +47,15 @@ def sidebar():
     st.sidebar.write(
         f"Have VAT? {'✅' if st.session_state[VAT_STATE_KEY] is not None else 'Not Loaded'} "
     )
+
+    metadata = api("metadata", "", as_json=True)
+    pickle_file = metadata["pickle_file"]
+    pickle_file = pickle_file.split("/")[-1]
+    timestamp = pickle_file.split("-")[1:]
+    timestamp = datetime.strptime(" ".join(timestamp), "%Y %m %d %H %M %S")
+    time_ago = datetime.now() - timestamp
+    time_ago_str = humanize.precisedelta(time_ago, minimum_unit="minutes")
+    st.sidebar.write(f"Last snapshot taken at: {timestamp} ({time_ago_str} ago)")
 
 
 def needs_rpc_and_vat(page_callable: callable):

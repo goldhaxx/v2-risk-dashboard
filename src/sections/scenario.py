@@ -73,7 +73,7 @@ def price_shock_page(loop: AbstractEventLoop, vat: Vat, drift_client: DriftClien
     start_time = time.time()
 
     price_scenario_users, user_keys, distorted_oracles = loop.run_until_complete(
-        get_usermap_df(drift_client, vat.users, "oracles", oracle_distort, None, cov)
+        get_usermap_df(drift_client, vat.users, "oracles", oracle_distort, cov)
     )
     # levs[0]
     end_time = time.time()

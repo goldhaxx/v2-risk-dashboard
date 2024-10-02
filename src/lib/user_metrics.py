@@ -131,7 +131,6 @@ async def get_usermap_df(
     user_map: UserMap,
     mode: str,
     oracle_distortion: float = 0.1,
-    only_one_index: Optional[str] = None,
     cov_matrix: Optional[str] = None,
     n_scenarios: int = 5,
 ):
@@ -139,22 +138,6 @@ async def get_usermap_df(
     user_vals = list(user_map.values())
 
     skipped_oracles = get_skipped_oracles(cov_matrix)
-
-    if only_one_index is None or len(only_one_index) > 12:
-        only_one_index_key = only_one_index
-    else:
-        only_one_index_key = (
-            [
-                str(x.oracle)
-                for x in mainnet_perp_market_configs
-                if x.base_asset_symbol == only_one_index
-            ]
-            + [
-                str(x.oracle)
-                for x in mainnet_spot_market_configs
-                if x.symbol == only_one_index
-            ]
-        )[0]
 
     if mode == "margins":
         leverages_none = calculate_leverages(user_vals, None)
@@ -185,18 +168,17 @@ async def get_usermap_df(
                 new_oracles_dat_down[i][key] = copy.deepcopy(val)
             if cov_matrix is not None and key in skipped_oracles:
                 continue
-            if only_one_index is None or only_one_index_key == key:
-                distorted_oracles.append(key)
-                for i in range(num_entrs):
-                    oracle_distort_up = max(1 + oracle_distortion * (i + 1), 1)
-                    oracle_distort_down = max(1 - oracle_distortion * (i + 1), 0)
+            distorted_oracles.append(key)
+            for i in range(num_entrs):
+                oracle_distort_up = max(1 + oracle_distortion * (i + 1), 1)
+                oracle_distort_down = max(1 - oracle_distortion * (i + 1), 0)
 
-                    if isinstance(new_oracles_dat_up[i][key], OraclePriceData):
-                        new_oracles_dat_up[i][key].price *= oracle_distort_up
-                        new_oracles_dat_down[i][key].price *= oracle_distort_down
-                    else:
-                        new_oracles_dat_up[i][key].data.price *= oracle_distort_up
-                        new_oracles_dat_down[i][key].data.price *= oracle_distort_down
+                if isinstance(new_oracles_dat_up[i][key], OraclePriceData):
+                    new_oracles_dat_up[i][key].price *= oracle_distort_up
+                    new_oracles_dat_down[i][key].price *= oracle_distort_down
+                else:
+                    new_oracles_dat_up[i][key].data.price *= oracle_distort_up
+                    new_oracles_dat_down[i][key].data.price *= oracle_distort_down
 
         levs_none = calculate_leverages(user_vals, None)
         levs_up = []
