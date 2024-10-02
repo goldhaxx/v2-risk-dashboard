@@ -22,7 +22,7 @@ construct==2.10.68
 construct-typing==0.5.3
 Deprecated==1.2.14
 dnspython==2.2.1
-driftpy==0.7.87
+driftpy==0.7.88
 Events==0.5
 exceptiongroup==1.0.4
 flake8==6.0.0
