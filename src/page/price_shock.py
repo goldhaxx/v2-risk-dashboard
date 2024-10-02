@@ -8,15 +8,13 @@ from anchorpy import Wallet
 from driftpy.account_subscription_config import AccountSubscriptionConfig
 from driftpy.drift_client import DriftClient
 from driftpy.pickle.vat import Vat
+from lib.api import api
 from lib.page import RPC_STATE_KEY
 from lib.page import VAT_STATE_KEY
 from lib.user_metrics import get_usermap_df
 import pandas as pd
 from solana.rpc.async_api import AsyncClient
 import streamlit as st
-
-from utils import load_newest_files
-from utils import load_vat
 
 
 def price_shock_plot(price_scenario_users: list[Any], oracle_distort: float):
@@ -62,22 +60,6 @@ def price_shock_plot(price_scenario_users: list[Any], oracle_distort: float):
 
 
 def price_shock_page():
-
-    rpc = st.session_state[RPC_STATE_KEY]
-    loop: AbstractEventLoop = asyncio.new_event_loop()
-    drift_client = DriftClient(
-        AsyncClient(rpc),
-        Wallet.dummy(),
-        account_subscription=AccountSubscriptionConfig("cached"),
-    )
-    loop: AbstractEventLoop = asyncio.new_event_loop()
-    newest_snapshot = load_newest_files(os.getcwd() + "/pickles")
-    start_load_vat = time.time()
-    vat = loop.run_until_complete(load_vat(drift_client, newest_snapshot))
-    st.session_state["vat"] = vat
-    print(f"loaded vat in {time.time() - start_load_vat}")
-    st.session_state[VAT_STATE_KEY] = vat
-
     cov_col, distort_col = st.columns(2)
     cov = cov_col.selectbox(
         "covariance:",
@@ -96,24 +78,19 @@ def price_shock_page():
         help="step size of oracle distortions",
     )
 
-    user_keys = list(vat.users.user_map.keys())
-    st.write(len(user_keys), "drift users")
-    start_time = time.time()
-
-    price_scenario_users, user_keys, distorted_oracles = loop.run_until_complete(
-        get_usermap_df(drift_client, vat.users, "oracles", oracle_distort, None, cov)
+    result = api(
+        "price-shock",
+        "usermap",
+        params={
+            "asset_group": cov,
+            "oracle_distortion": oracle_distort,
+            "n_scenarios": 5,
+        },
+        as_json=True,
     )
+    st.write(result)
 
-    end_time = time.time()
-    time_to_run = end_time - start_time
-    st.write(
-        time_to_run,
-        "seconds to run",
-        1 + len(price_scenario_users[1]) + len(price_scenario_users[2]),
-        "price-shock scenarios",
-    )
-
-    price_shock_plot(price_scenario_users, oracle_distort)
+    # price_shock_plot(price_scenario_users, oracle_distort)
 
     # oracle_down_max = pd.DataFrame(price_scenario_users[-1][-1], index=user_keys)
     # with st.expander(

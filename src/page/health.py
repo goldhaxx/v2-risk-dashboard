@@ -1,36 +1,41 @@
+from lib.api import api
+import plotly.express as px
 import streamlit as st
-
-from lib.health_utils import (
-    get_account_health_distribution,
-    get_largest_perp_positions,
-    get_largest_spot_borrows,
-    get_most_levered_perp_positions_above_1m,
-    get_most_levered_spot_borrows_above_1m,
-)
-from lib.page import VAT_STATE_KEY
 
 
 def health_page():
-    vat = st.session_state[VAT_STATE_KEY]
-    health_distribution = get_account_health_distribution(vat)
+    health_distribution = api("health", "health_distribution")
+    largest_perp_positions = api("health", "largest_perp_positions")
+    most_levered_positions = api("health", "most_levered_perp_positions_above_1m")
+    largest_spot_borrows = api("health", "largest_spot_borrows")
+    most_levered_borrows = api("health", "most_levered_spot_borrows_above_1m")
+
+    fig = px.bar(
+        health_distribution,
+        x="Health Range",
+        y="Counts",
+        title="Health Distribution",
+        hover_data={"Notional Values": ":,"},  # Custom format for notional values
+        labels={"Counts": "Num Users", "Notional Values": "Notional Value ($)"},
+    )
+
+    fig.update_traces(
+        hovertemplate="<b>Health Range: %{x}</b><br>Count: %{y}<br>Notional Value: $%{customdata[0]:,.0f}<extra></extra>"
+    )
 
     with st.container():
-        st.plotly_chart(health_distribution, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True)
 
     perp_col, spot_col = st.columns([1, 1])
 
     with perp_col:
-        largest_perp_positions = get_largest_perp_positions(vat)
         st.markdown("### **Largest perp positions:**")
-        st.table(largest_perp_positions)
-        most_levered_positions = get_most_levered_perp_positions_above_1m(vat)
+        st.write(largest_perp_positions)
         st.markdown("### **Most levered perp positions > $1m:**")
-        st.table(most_levered_positions)
+        st.write(most_levered_positions)
 
     with spot_col:
-        largest_spot_borrows = get_largest_spot_borrows(vat)
         st.markdown("### **Largest spot borrows:**")
-        st.table(largest_spot_borrows)
-        most_levered_borrows = get_most_levered_spot_borrows_above_1m(vat)
+        st.write(largest_spot_borrows)
         st.markdown("### **Most levered spot borrows > $750k:**")
-        st.table(most_levered_borrows)
+        st.write(most_levered_borrows)
