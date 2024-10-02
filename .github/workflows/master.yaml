@@ -86,6 +86,6 @@ jobs:
 
       - name: Restart deployment
         run: |
-          aws eks update-kubeconfig --name drift-prod-cluster --region eu-west-1 --role-arn arn:aws:iam::011528263343:role/k8sAdmin
+          aws eks update-kubeconfig --name drift-prod-cluster --region eu-west-1 --role-arn arn:aws:iam::875427118836:role/k8sAdmin
           kubectl rollout restart -n mainnet-beta deployment/risk-dashboard-frontend
           kubectl rollout restart -n mainnet-beta deployment/risk-dashboard-backend
