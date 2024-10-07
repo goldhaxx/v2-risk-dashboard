@@ -28,7 +28,7 @@ if __name__ == "__main__":
                 icon=":material/home:",
             ),
             st.Page(
-                needs_backend(orderbook_page),
+                orderbook_page,
                 url_path="orderbook",
                 title="Orderbook",
                 icon="📈",
