@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 from lib.page import header
-from lib.page import needs_rpc_and_vat
+from lib.page import needs_backend
 from lib.page import sidebar
 from page.asset_liability import asset_liab_matrix_page
 from page.backend import backend_page
@@ -28,37 +28,37 @@ if __name__ == "__main__":
                 icon=":material/home:",
             ),
             st.Page(
-                orderbook_page,
+                needs_backend(orderbook_page),
                 url_path="orderbook",
                 title="Orderbook",
                 icon="📈",
             ),
             st.Page(
-                health_page,
+                needs_backend(health_page),
                 url_path="health",
                 title="Health",
                 icon="🏥",
             ),
             st.Page(
-                price_shock_page,
+                needs_backend(price_shock_page),
                 url_path="price-shock",
                 title="Price Shock",
                 icon="💸",
             ),
             st.Page(
-                asset_liab_matrix_page,
+                needs_backend(asset_liab_matrix_page),
                 url_path="asset-liab-matrix",
                 title="Asset-Liab Matrix",
                 icon="📊",
             ),
             st.Page(
-                plot_liquidation_curve,
+                needs_backend(plot_liquidation_curve),
                 url_path="liquidation-curves",
                 title="Liquidation Curves",
                 icon="🌊",
             ),
             st.Page(
-                backend_page,
+                needs_backend(backend_page),
                 url_path="backend",
                 title="Control Backend",
                 icon="🧪",
