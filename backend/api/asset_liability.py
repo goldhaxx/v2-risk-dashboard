@@ -2,6 +2,7 @@ from backend.state import BackendRequest
 from backend.state import BackendState
 from backend.utils.matrix import get_matrix
 from backend.utils.user_metrics import get_usermap_df
+from backend.utils.waiting_for import waiting_for
 from driftpy.drift_client import DriftClient
 from driftpy.pickle.vat import Vat
 from fastapi import APIRouter
@@ -18,7 +19,8 @@ async def get_asset_liability_matrix(
     vat: Vat = backend_state.vat
     drift_client: DriftClient = backend_state.dc
 
-    res, df = await get_matrix(drift_client, vat, mode, perp_market_index)
+    with waiting_for("Getting asset liability matrix"):
+        res, df = await get_matrix(drift_client, vat, mode, perp_market_index)
 
     return {
         "res": res.to_dict(),
