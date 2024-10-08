@@ -67,8 +67,13 @@ def get_account_health_distribution(request: BackendRequest):
     }
 
     for user in vat.users.values():
-        total_collateral = user.get_total_collateral() / PRICE_PRECISION
-        current_health = user.get_health()
+        # print(user.user_public_key)
+        try:
+            total_collateral = user.get_total_collateral() / PRICE_PRECISION
+            current_health = user.get_health()
+        except Exception as e:
+            print(f"==> Error from health [{user.user_public_key}] ", e)
+            continue
         match current_health:
             case _ if current_health < 10:
                 health_notional_distributions["0-10%"] += total_collateral
@@ -187,7 +192,14 @@ def get_most_levered_perp_positions_above_1m(request: BackendRequest):
     top_positions: list[tuple[float, str, int, float, float]] = []
 
     for user in vat.users.values():
-        total_collateral = user.get_total_collateral() / PRICE_PRECISION
+        try:
+            total_collateral = user.get_total_collateral() / PRICE_PRECISION
+        except Exception as e:
+            print(
+                f"==> Error from get_most_levered_perp_positions_above_1m [{user.user_public_key}] ",
+                e,
+            )
+            continue
         if total_collateral > 0:
             for position in user.get_user_account().perp_positions:
                 if position.base_asset_amount > 0:
@@ -310,7 +322,14 @@ def get_most_levered_spot_borrows_above_1m(request: BackendRequest):
     top_borrows: list[tuple[float, str, int, float, float]] = []
 
     for user in vat.users.values():
-        total_collateral = user.get_total_collateral() / PRICE_PRECISION
+        try:
+            total_collateral = user.get_total_collateral() / PRICE_PRECISION
+        except Exception as e:
+            print(
+                f"==> Error from get_most_levered_spot_borrows_above_1m [{user.user_public_key}] ",
+                e,
+            )
+            raise e
         if total_collateral > 0:
             for position in user.get_user_account().spot_positions:
                 if (
