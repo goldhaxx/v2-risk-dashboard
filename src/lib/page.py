@@ -31,18 +31,24 @@ def header():
 
 
 def sidebar():
-    st.sidebar.header("Options")
+    st.sidebar.header("Data Information")
     try:
         metadata = api("metadata", "", as_json=True)
         pickle_file = metadata["pickle_file"]
-        pickle_file = pickle_file.split("/")[-1]
+        if pickle_file[-1] == "/":
+            pickle_file = pickle_file[:-1]
         timestamp = pickle_file.split("-")[1:]
         timestamp = datetime.strptime(" ".join(timestamp), "%Y %m %d %H %M %S")
         time_ago = datetime.now() - timestamp
-        time_ago_str = humanize.precisedelta(time_ago, minimum_unit="minutes")
-        st.sidebar.write(f"Last snapshot taken at: {timestamp} ({time_ago_str} ago)")
+        time_ago_str = humanize.precisedelta(
+            time_ago,
+            minimum_unit="seconds",
+        )
+        st.sidebar.write(f"Last snapshot: {timestamp}")
+        st.sidebar.write(f"Time since last snapshot: {time_ago_str}")
     except Exception as e:
-        st.sidebar.write("# Unable to reach backend")
+        print(e)
+        st.sidebar.error("Unable to reach backend")
 
 
 def needs_backend(page_callable: callable):

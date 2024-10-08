@@ -1,13 +1,12 @@
-import pandas as pd
-import requests
+from lib.api import api
 import streamlit as st
 
 
 def backend_page():
 
     if st.button("Load Pickle"):
-        result = requests.get("http://localhost:8000/pickle")
-        st.write(result.json())
+        result = api("snapshot", "pickle", as_json=True)
+        st.write(result)
 
     st.write(
         """
