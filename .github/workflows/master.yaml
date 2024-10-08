@@ -1,0 +1,91 @@
+name: Build Image And Deploy
+on:
+  push:
+    branches: [master, sina/risk-dashboard-monorepo-update] # Temporarily allow this branch run the workflow
+
+jobs:
+  build-frontend:
+    runs-on: ubicloud
+    env:
+      ECR_REPO_URI: 875427118836.dkr.ecr.eu-west-1.amazonaws.com/v2-risk-dashboard
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@master
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY_PROD }}
+          aws-region: "eu-west-1"
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Install kubectl
+        run: |
+          curl -o kubectl https://s3.us-west-2.amazonaws.com/amazon-eks/1.23.7/2022-06-29/bin/linux/amd64/kubectl
+          curl https://s3.us-west-2.amazonaws.com/amazon-eks/1.23.7/2022-06-29/bin/linux/amd64/kubectl.sha256
+          openssl sha1 -sha256 kubectl
+          chmod +x ./kubectl
+          kubectl version --client=true
+
+      - name: Docker build
+        run: |
+          ECR_REPO_URI=875427118836.dkr.ecr.eu-west-1.amazonaws.com/v2-risk-dashboard
+          docker build -f ./Dockerfile-frontend -t $ECR_REPO_URI:${{github.sha}}-frontend -t $ECR_REPO_URI:latest-frontend .
+          docker push $ECR_REPO_URI:${{github.sha}}-frontend
+          docker push $ECR_REPO_URI:latest-frontend
+
+  build-backend:
+    runs-on: ubicloud
+    env:
+      ECR_REPO_URI: 875427118836.dkr.ecr.eu-west-1.amazonaws.com/v2-risk-dashboard
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@master
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY_PROD }}
+          aws-region: "eu-west-1"
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Docker build
+        run: |
+          ECR_REPO_URI=875427118836.dkr.ecr.eu-west-1.amazonaws.com/v2-risk-dashboard
+          docker build -f ./Dockerfile-backend -t $ECR_REPO_URI:${{github.sha}}-backend -t $ECR_REPO_URI:latest-backend .
+          docker push $ECR_REPO_URI:${{github.sha}}-backend
+          docker push $ECR_REPO_URI:latest-backend
+
+  deploy:
+    runs-on: ubicloud
+    needs: [build-frontend, build-backend]
+    env:
+      ECR_REPO_URI: 875427118836.dkr.ecr.eu-west-1.amazonaws.com/v2-risk-dashboard
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@master
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_PROD }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_KEY_PROD }}
+          aws-region: "eu-west-1"
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Restart deployment
+        run: |
+          aws eks update-kubeconfig --name drift-prod-cluster --region eu-west-1 --role-arn arn:aws:iam::875427118836:role/k8sAdmin
+          kubectl rollout restart -n mainnet-beta deployment/risk-dashboard-frontend
+          kubectl rollout restart -n mainnet-beta deployment/risk-dashboard-backend
