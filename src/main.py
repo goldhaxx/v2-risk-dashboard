@@ -1,3 +1,5 @@
+import os
+
 from dotenv import load_dotenv
 from lib.page import header
 from lib.page import needs_backend
@@ -19,50 +21,53 @@ if __name__ == "__main__":
     header()
     sidebar()
 
-    pg = st.navigation(
-        [
-            st.Page(
-                welcome_page,
-                url_path="welcome",
-                title="Welcome",
-                icon=":material/home:",
-            ),
-            st.Page(
-                orderbook_page,
-                url_path="orderbook",
-                title="Orderbook",
-                icon="📈",
-            ),
-            st.Page(
-                needs_backend(health_page),
-                url_path="health",
-                title="Health",
-                icon="🏥",
-            ),
-            st.Page(
-                needs_backend(price_shock_page),
-                url_path="price-shock",
-                title="Price Shock",
-                icon="💸",
-            ),
-            st.Page(
-                needs_backend(asset_liab_matrix_page),
-                url_path="asset-liab-matrix",
-                title="Asset-Liab Matrix",
-                icon="📊",
-            ),
-            st.Page(
-                needs_backend(plot_liquidation_curve),
-                url_path="liquidation-curves",
-                title="Liquidation Curves",
-                icon="🌊",
-            ),
+    pages = [
+        st.Page(
+            welcome_page,
+            url_path="welcome",
+            title="Welcome",
+            icon=":material/home:",
+        ),
+        st.Page(
+            orderbook_page,
+            url_path="orderbook",
+            title="Orderbook",
+            icon="📈",
+        ),
+        st.Page(
+            needs_backend(health_page),
+            url_path="health",
+            title="Health",
+            icon="🏥",
+        ),
+        st.Page(
+            needs_backend(price_shock_page),
+            url_path="price-shock",
+            title="Price Shock",
+            icon="💸",
+        ),
+        st.Page(
+            needs_backend(asset_liab_matrix_page),
+            url_path="asset-liab-matrix",
+            title="Asset-Liab Matrix",
+            icon="📊",
+        ),
+        st.Page(
+            needs_backend(plot_liquidation_curve),
+            url_path="liquidation-curves",
+            title="Liquidation Curves",
+            icon="🌊",
+        ),
+    ]
+    if os.getenv("DEV"):
+        pages.append(
             st.Page(
                 needs_backend(backend_page),
                 url_path="backend",
                 title="Control Backend",
                 icon="🧪",
-            ),
-        ]
-    )
+            )
+        )
+
+    pg = st.navigation(pages)
     pg.run()

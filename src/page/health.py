@@ -30,12 +30,12 @@ def health_page():
 
     with perp_col:
         st.markdown("### **Largest perp positions:**")
-        st.write(largest_perp_positions)
+        st.dataframe(largest_perp_positions, hide_index=True)
         st.markdown("### **Most levered perp positions > $1m:**")
-        st.write(most_levered_positions)
+        st.dataframe(most_levered_positions, hide_index=True)
 
     with spot_col:
         st.markdown("### **Largest spot borrows:**")
-        st.write(largest_spot_borrows)
+        st.dataframe(largest_spot_borrows, hide_index=True)
         st.markdown("### **Most levered spot borrows > $750k:**")
-        st.write(most_levered_borrows)
+        st.dataframe(most_levered_borrows, hide_index=True)
