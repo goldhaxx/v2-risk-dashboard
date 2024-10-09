@@ -2,7 +2,7 @@ from typing import Optional
 
 from backend.state import BackendRequest
 from backend.state import BackendState
-from backend.utils.matrix import get_usermap_df
+from backend.utils.user_metrics import get_user_leverages_for_price_shock
 from driftpy.drift_client import DriftClient
 from driftpy.pickle.vat import Vat
 from fastapi import APIRouter
@@ -22,15 +22,12 @@ async def get_price_shock(
     vat: Vat = backend_state.vat
     drift_client: DriftClient = backend_state.dc
 
-    result = await get_usermap_df(
+    result = get_user_leverages_for_price_shock(
         drift_client,
         vat.users,
-        "oracles",
         oracle_distortion,
         asset_group,
         n_scenarios,
     )
 
-    print(result)
-
-    return {}
+    return result

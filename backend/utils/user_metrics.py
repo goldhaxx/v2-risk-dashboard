@@ -1,6 +1,7 @@
 import copy
 from typing import List, Optional
 
+from driftpy.accounts.cache import DriftClientCache
 from driftpy.constants.numeric_constants import MARGIN_PRECISION
 from driftpy.constants.numeric_constants import QUOTE_PRECISION
 from driftpy.constants.perp_markets import mainnet_perp_market_configs
@@ -56,7 +57,10 @@ def get_perp_liab_composition(x: DriftUser, margin_category, n):
     return net_p
 
 
-def get_user_metrics(x: DriftUser, margin_category: MarginCategory):
+def get_user_metrics_for_asset_liability(
+    x: DriftUser,
+    margin_category: MarginCategory,
+):
     """
     Returns a dictionary of the user's health, leverage, and other metrics.
     """
@@ -89,6 +93,41 @@ def get_user_metrics(x: DriftUser, margin_category: MarginCategory):
     return metrics
 
 
+def get_user_metrics_for_price_shock(
+    x: DriftUser,
+    margin_category: MarginCategory,
+    oracle_cache: Optional[DriftClientCache] = None,
+):
+    """
+    Returns a dictionary of the user's health, leverage, and other metrics.
+    """
+    if oracle_cache is not None:
+        x.drift_client.account_subscriber.cache = oracle_cache
+
+    metrics = {
+        "user_key": x.user_public_key,
+        "leverage": x.get_leverage() / MARGIN_PRECISION,
+        "perp_liability": x.get_total_perp_position_liability(margin_category)
+        / QUOTE_PRECISION,
+        "spot_asset": x.get_spot_market_asset_value(None, margin_category)
+        / QUOTE_PRECISION,
+        "spot_liability": x.get_spot_market_liability_value(None, margin_category)
+        / QUOTE_PRECISION,
+        "upnl": x.get_unrealized_pnl(True) / QUOTE_PRECISION,
+        "net_usd_value": (
+            x.get_net_spot_market_value(None) + x.get_unrealized_pnl(True)
+        )
+        / QUOTE_PRECISION,
+    }
+    metrics["health"] = (
+        get_init_health(x)
+        if margin_category == MarginCategory.INITIAL
+        else x.get_health()
+    )
+
+    return metrics
+
+
 def get_skipped_oracles(cov_matrix: Optional[str]) -> List[str]:
     """
     Determine which oracles to skip based on the cov_matrix parameter.
@@ -113,19 +152,54 @@ def get_skipped_oracles(cov_matrix: Optional[str]) -> List[str]:
         return []
 
 
-def calculate_leverages(
-    user_vals: list[DriftUser], maintenance_category: MarginCategory
+def calculate_leverages_for_asset_liability(
+    user_values: list[DriftUser], maintenance_category: MarginCategory
 ):
     """
     Calculate the leverages for all users at a given maintenance category
     """
-    return list(get_user_metrics(x, maintenance_category) for x in user_vals)
+    return [
+        get_user_metrics_for_asset_liability(x, maintenance_category)
+        for x in user_values
+    ]
 
 
-async def get_usermap_df(
+def calculate_leverages_for_price_shock(
+    user_values: list[DriftUser],
+    maintenance_category: MarginCategory,
+    oracle_cache: Optional[DriftClientCache] = None,
+):
+    """
+    Calculate the leverages for all users at a given maintenance category
+    """
+    return [
+        get_user_metrics_for_price_shock(x, maintenance_category, oracle_cache)
+        for x in user_values
+    ]
+
+
+def get_user_leverages_for_asset_liability(user_map: UserMap):
+    user_keys = list(user_map.user_map.keys())
+    user_values = list(user_map.values())
+
+    leverages_none = calculate_leverages_for_asset_liability(user_values, None)
+    leverages_initial = calculate_leverages_for_asset_liability(
+        user_values, MarginCategory.INITIAL
+    )
+    leverages_maintenance = calculate_leverages_for_asset_liability(
+        user_values, MarginCategory.MAINTENANCE
+    )
+    return {
+        "leverages_none": leverages_none,
+        "leverages_initial": leverages_initial,
+        "leverages_maintenance": leverages_maintenance,
+        "user_keys": user_keys,
+    }
+
+
+def get_user_leverages_for_price_shock(
     _drift_client: DriftClient,
     user_map: UserMap,
-    mode: str,
     oracle_distortion: float = 0.1,
     cov_matrix: Optional[str] = None,
     n_scenarios: int = 5,
@@ -133,70 +207,64 @@ async def get_usermap_df(
     user_keys = list(user_map.user_map.keys())
     user_vals = list(user_map.values())
 
+    num_entrs = n_scenarios
+    new_oracles_dat_up = []
+    new_oracles_dat_down = []
     skipped_oracles = get_skipped_oracles(cov_matrix)
 
-    if mode == "margins":
-        leverages_none = calculate_leverages(user_vals, None)
-        leverages_initial = calculate_leverages(user_vals, MarginCategory.INITIAL)
-        leverages_maintenance = calculate_leverages(
-            user_vals, MarginCategory.MAINTENANCE
+    for i in range(num_entrs):
+        new_oracles_dat_up.append({})
+        new_oracles_dat_down.append({})
+
+    assert len(new_oracles_dat_down) == num_entrs
+    print("skipped oracles:", skipped_oracles)
+    distorted_oracles = []
+    cache_up = copy.deepcopy(_drift_client.account_subscriber.cache)
+    cache_down = copy.deepcopy(_drift_client.account_subscriber.cache)
+    for i, (key, val) in enumerate(
+        _drift_client.account_subscriber.cache["oracle_price_data"].items()
+    ):
+        for i in range(num_entrs):
+            new_oracles_dat_up[i][key] = copy.deepcopy(val)
+            new_oracles_dat_down[i][key] = copy.deepcopy(val)
+        if cov_matrix is not None and key in skipped_oracles:
+            continue
+        distorted_oracles.append(key)
+        for i in range(num_entrs):
+            oracle_distort_up = max(1 + oracle_distortion * (i + 1), 1)
+            oracle_distort_down = max(1 - oracle_distortion * (i + 1), 0)
+
+            if isinstance(new_oracles_dat_up[i][key], OraclePriceData):
+                new_oracles_dat_up[i][key].price *= oracle_distort_up
+                new_oracles_dat_down[i][key].price *= oracle_distort_down
+            else:
+                new_oracles_dat_up[i][key].data.price *= oracle_distort_up
+                new_oracles_dat_down[i][key].data.price *= oracle_distort_down
+
+    leverages_none = calculate_leverages_for_price_shock(user_vals, None)
+    leverages_up = []
+    leverages_down = []
+
+    for i in range(num_entrs):
+        cache_up["oracle_price_data"] = new_oracles_dat_up[i]
+        cache_down["oracle_price_data"] = new_oracles_dat_down[i]
+        leverages_up_i = calculate_leverages_for_price_shock(
+            user_vals,
+            None,
+            cache_up,
         )
-        return {
-            "leverages_none": leverages_none,
-            "leverages_initial": leverages_initial,
-            "leverages_maintenance": leverages_maintenance,
-            "user_keys": user_keys,
-        }
-    else:
-        num_entrs = n_scenarios
-        new_oracles_dat_up = []
-        new_oracles_dat_down = []
+        leverages_down_i = calculate_leverages_for_price_shock(
+            user_vals,
+            None,
+            cache_down,
+        )
+        leverages_up.append(leverages_up_i)
+        leverages_down.append(leverages_down_i)
 
-        for i in range(num_entrs):
-            new_oracles_dat_up.append({})
-            new_oracles_dat_down.append({})
-
-        assert len(new_oracles_dat_down) == num_entrs
-        print("skipped oracles:", skipped_oracles)
-        distorted_oracles = []
-        cache_up = copy.deepcopy(_drift_client.account_subscriber.cache)
-        cache_down = copy.deepcopy(_drift_client.account_subscriber.cache)
-        for i, (key, val) in enumerate(
-            _drift_client.account_subscriber.cache["oracle_price_data"].items()
-        ):
-            for i in range(num_entrs):
-                new_oracles_dat_up[i][key] = copy.deepcopy(val)
-                new_oracles_dat_down[i][key] = copy.deepcopy(val)
-            if cov_matrix is not None and key in skipped_oracles:
-                continue
-            distorted_oracles.append(key)
-            for i in range(num_entrs):
-                oracle_distort_up = max(1 + oracle_distortion * (i + 1), 1)
-                oracle_distort_down = max(1 - oracle_distortion * (i + 1), 0)
-
-                if isinstance(new_oracles_dat_up[i][key], OraclePriceData):
-                    new_oracles_dat_up[i][key].price *= oracle_distort_up
-                    new_oracles_dat_down[i][key].price *= oracle_distort_down
-                else:
-                    new_oracles_dat_up[i][key].data.price *= oracle_distort_up
-                    new_oracles_dat_down[i][key].data.price *= oracle_distort_down
-
-        levs_none = calculate_leverages(user_vals, None)
-        levs_up = []
-        levs_down = []
-
-        for i in range(num_entrs):
-            cache_up["oracle_price_data"] = new_oracles_dat_up[i]
-            cache_down["oracle_price_data"] = new_oracles_dat_down[i]
-            levs_up_i = list(get_user_metrics(x, None, cache_up) for x in user_vals)
-            levs_down_i = list(get_user_metrics(x, None, cache_down) for x in user_vals)
-            levs_up.append(levs_up_i)
-            levs_down.append(levs_down_i)
-
-        return {
-            "leverages_none": levs_none,
-            "leverages_up": tuple(levs_up),
-            "leverages_down": tuple(levs_down),
-            "user_keys": user_keys,
-            "distorted_oracles": distorted_oracles,
-        }
+    return {
+        "leverages_none": leverages_none,
+        "leverages_up": tuple(leverages_up),
+        "leverages_down": tuple(leverages_down),
+        "user_keys": user_keys,
+        "distorted_oracles": distorted_oracles,
+    }

@@ -1,4 +1,4 @@
-from backend.utils.user_metrics import get_usermap_df
+from backend.utils.user_metrics import get_user_leverages_for_asset_liability
 from driftpy.constants.spot_markets import mainnet_spot_market_configs
 from driftpy.drift_client import DriftClient
 from driftpy.pickle.vat import Vat
@@ -6,21 +6,13 @@ import pandas as pd
 
 
 async def get_matrix(
-    drift_client: DriftClient,
     vat: Vat,
-    mode=0,
-    perp_market_index=0,
+    mode: int = 0,
+    perp_market_index: int = 0,
 ):
     NUMBER_OF_SPOT = len(mainnet_spot_market_configs)
 
-    res = await get_usermap_df(
-        drift_client,
-        vat.users,
-        "margins",
-        oracle_distortion=0,
-        cov_matrix="ignore stables",
-        n_scenarios=0,
-    )
+    res = get_user_leverages_for_asset_liability(vat.users)
     levs_none = res["leverages_none"]
     levs_init = res["leverages_initial"]
     levs_maint = res["leverages_maintenance"]
