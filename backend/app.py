@@ -23,12 +23,12 @@ load_dotenv()
 state = BackendState()
 
 
-@repeat_every(seconds=60 * 5)  # 5 minutes
+@repeat_every(seconds=60 * 8, wait_first=True)
 async def repeatedly_retake_snapshot(state: BackendState) -> None:
     await state.take_pickle_snapshot()
 
 
-@repeat_every(seconds=60 * 5)  # 5 minutes
+@repeat_every(seconds=60 * 8, wait_first=True)
 async def repeatedly_clean_cache(state: BackendState) -> None:
     if not os.path.exists("pickles"):
         print("pickles folder does not exist")
