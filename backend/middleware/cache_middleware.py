@@ -19,6 +19,8 @@ class CacheMiddleware(BaseHTTPMiddleware):
             os.makedirs(self.cache_dir)
 
     async def dispatch(self, request: BackendRequest, call_next):
+        if request.url.path.startswith("/api/price_shock"):
+            return await call_next(request)
         if not request.url.path.startswith("/api"):
             return await call_next(request)
         if self.state.current_pickle_path == "bootstrap":
