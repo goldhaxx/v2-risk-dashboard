@@ -198,39 +198,37 @@ def get_user_leverages_for_asset_liability(user_map: UserMap):
 
 
 def get_user_leverages_for_price_shock(
-    _drift_client: DriftClient,
+    drift_client: DriftClient,
     user_map: UserMap,
     oracle_distortion: float = 0.1,
-    cov_matrix: Optional[str] = None,
-    n_scenarios: int = 5,
+    oracle_group: Optional[str] = None,
+    scenarios: int = 5,
 ):
     user_keys = list(user_map.user_map.keys())
     user_vals = list(user_map.values())
 
-    num_entrs = n_scenarios
     new_oracles_dat_up = []
     new_oracles_dat_down = []
-    skipped_oracles = get_skipped_oracles(cov_matrix)
+    skipped_oracles = get_skipped_oracles(oracle_group)
 
-    for i in range(num_entrs):
+    for i in range(scenarios):
         new_oracles_dat_up.append({})
         new_oracles_dat_down.append({})
 
-    assert len(new_oracles_dat_down) == num_entrs
     print("skipped oracles:", skipped_oracles)
+
     distorted_oracles = []
-    cache_up = copy.deepcopy(_drift_client.account_subscriber.cache)
-    cache_down = copy.deepcopy(_drift_client.account_subscriber.cache)
-    for i, (key, val) in enumerate(
-        _drift_client.account_subscriber.cache["oracle_price_data"].items()
-    ):
-        for i in range(num_entrs):
+    cache_up = copy.deepcopy(drift_client.account_subscriber.cache)
+    cache_down = copy.deepcopy(drift_client.account_subscriber.cache)
+
+    for key, val in drift_client.account_subscriber.cache["oracle_price_data"].items():
+        for i in range(scenarios):
             new_oracles_dat_up[i][key] = copy.deepcopy(val)
             new_oracles_dat_down[i][key] = copy.deepcopy(val)
-        if cov_matrix is not None and key in skipped_oracles:
+        if oracle_group is not None and key in skipped_oracles:
             continue
         distorted_oracles.append(key)
-        for i in range(num_entrs):
+        for i in range(scenarios):
             oracle_distort_up = max(1 + oracle_distortion * (i + 1), 1)
             oracle_distort_down = max(1 - oracle_distortion * (i + 1), 0)
 
@@ -245,7 +243,7 @@ def get_user_leverages_for_price_shock(
     leverages_up = []
     leverages_down = []
 
-    for i in range(num_entrs):
+    for i in range(scenarios):
         cache_up["oracle_price_data"] = new_oracles_dat_up[i]
         cache_down["oracle_price_data"] = new_oracles_dat_down[i]
         leverages_up_i = calculate_leverages_for_price_shock(
