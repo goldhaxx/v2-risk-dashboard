@@ -4,9 +4,9 @@ on:
     branches: [master, sina/risk-dashboard-monorepo-update] # Temporarily allow this branch run the workflow
 
 env:
-  ECR_REPO_URI: 875427118836.dkr.ecr.eu-west-1.amazonaws.com/v2-risk-dashboard
-  EKS_CLUSTER_NAME: drift-prod-cluster
-  K8S_ADMIN_ROLE_ARN: arn:aws:iam::875427118836:role/k8sAdmin
+  ECR_REPO_URI: ${{ secrets.ECR_REPO_URI }}
+  EKS_CLUSTER_NAME: ${{ secrets.EKS_CLUSTER_NAME }}
+  K8S_ADMIN_ROLE_ARN: ${{ secrets.K8S_ADMIN_ROLE_ARN }}
 
 jobs:
   build-frontend:
