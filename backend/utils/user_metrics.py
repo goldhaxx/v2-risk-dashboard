@@ -1,4 +1,5 @@
 import copy
+import functools
 from typing import List, Optional
 
 from driftpy.accounts.cache import DriftClientCache
@@ -57,6 +58,19 @@ def get_perp_liab_composition(x: DriftUser, margin_category, n):
     return net_p
 
 
+@functools.cache
+def get_stable_metrics(x: DriftUser):
+    unrealized_pnl = x.get_unrealized_pnl(True)
+    net_spot_market_value = x.get_net_spot_market_value(None)
+    net_usd_value = (net_spot_market_value + unrealized_pnl) / QUOTE_PRECISION
+    return {
+        "user_key": x.user_public_key,
+        "leverage": x.get_leverage() / MARGIN_PRECISION,
+        "upnl": unrealized_pnl / QUOTE_PRECISION,
+        "net_usd_value": net_usd_value,
+    }
+
+
 def get_user_metrics_for_asset_liability(
     x: DriftUser,
     margin_category: MarginCategory,
@@ -64,29 +78,34 @@ def get_user_metrics_for_asset_liability(
     """
     Returns a dictionary of the user's health, leverage, and other metrics.
     """
-    NUMBER_OF_SPOT = len(mainnet_spot_market_configs)
-    NUMBER_OF_PERP = len(mainnet_perp_market_configs)
+
+    asset_value = x.get_spot_market_asset_value(None, margin_category) / QUOTE_PRECISION
+    liability_value = (
+        x.get_spot_market_liability_value(None, margin_category) / QUOTE_PRECISION
+    )
+    perp_liability = (
+        x.get_total_perp_position_liability(margin_category) / QUOTE_PRECISION
+    )
+
+    metrics_stable = get_stable_metrics(x)
+    metrics_unstable = {
+        "perp_liability": perp_liability,
+        "spot_asset": asset_value,
+        "spot_liability": liability_value,
+    }
 
     metrics = {
-        "user_key": x.user_public_key,
-        "leverage": x.get_leverage() / MARGIN_PRECISION,
-        "perp_liability": x.get_total_perp_position_liability(margin_category)
-        / QUOTE_PRECISION,
-        "spot_asset": x.get_spot_market_asset_value(None, margin_category)
-        / QUOTE_PRECISION,
-        "spot_liability": x.get_spot_market_liability_value(None, margin_category)
-        / QUOTE_PRECISION,
-        "upnl": x.get_unrealized_pnl(True) / QUOTE_PRECISION,
-        "net_usd_value": (
-            x.get_net_spot_market_value(None) + x.get_unrealized_pnl(True)
-        )
-        / QUOTE_PRECISION,
+        **metrics_stable,
+        **metrics_unstable,
     }
-    metrics["health"] = (
-        get_init_health(x)
-        if margin_category == MarginCategory.INITIAL
-        else x.get_health()
-    )
+
+    if margin_category == MarginCategory.INITIAL:
+        metrics["health"] = get_init_health(x)
+    else:
+        metrics["health"] = x.get_health()
+
+    NUMBER_OF_SPOT = len(mainnet_spot_market_configs)
+    NUMBER_OF_PERP = len(mainnet_perp_market_configs)
     metrics["net_v"] = get_collateral_composition(x, margin_category, NUMBER_OF_SPOT)
     metrics["net_p"] = get_perp_liab_composition(x, margin_category, NUMBER_OF_PERP)
 
@@ -104,26 +123,38 @@ def get_user_metrics_for_price_shock(
     if oracle_cache is not None:
         x.drift_client.account_subscriber.cache = oracle_cache
 
-    metrics = {
+    asset_value = x.get_spot_market_asset_value(None, margin_category) / QUOTE_PRECISION
+    liability_value = (
+        x.get_spot_market_liability_value(None, margin_category) / QUOTE_PRECISION
+    )
+    perp_liability = (
+        x.get_total_perp_position_liability(margin_category) / QUOTE_PRECISION
+    )
+    unrealized_pnl = x.get_unrealized_pnl(True)
+    net_spot_market_value = x.get_net_spot_market_value(None)
+    net_usd_value = (net_spot_market_value + unrealized_pnl) / QUOTE_PRECISION
+
+    metrics_stable = {
         "user_key": x.user_public_key,
         "leverage": x.get_leverage() / MARGIN_PRECISION,
-        "perp_liability": x.get_total_perp_position_liability(margin_category)
-        / QUOTE_PRECISION,
-        "spot_asset": x.get_spot_market_asset_value(None, margin_category)
-        / QUOTE_PRECISION,
-        "spot_liability": x.get_spot_market_liability_value(None, margin_category)
-        / QUOTE_PRECISION,
-        "upnl": x.get_unrealized_pnl(True) / QUOTE_PRECISION,
-        "net_usd_value": (
-            x.get_net_spot_market_value(None) + x.get_unrealized_pnl(True)
-        )
-        / QUOTE_PRECISION,
+        "upnl": unrealized_pnl / QUOTE_PRECISION,
+        "net_usd_value": net_usd_value,
     }
-    metrics["health"] = (
-        get_init_health(x)
-        if margin_category == MarginCategory.INITIAL
-        else x.get_health()
-    )
+    metrics_unstable = {
+        "perp_liability": perp_liability,
+        "spot_asset": asset_value,
+        "spot_liability": liability_value,
+    }
+
+    metrics = {
+        **metrics_stable,
+        **metrics_unstable,
+    }
+
+    if margin_category == MarginCategory.INITIAL:
+        metrics["health"] = get_init_health(x)
+    else:
+        metrics["health"] = x.get_health()
 
     return metrics
 
