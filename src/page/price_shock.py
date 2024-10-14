@@ -98,6 +98,13 @@ def price_shock_plot(user_leverages, oracle_distort: float):
 
 
 def price_shock_page():
+    # Get query parameters
+    params = st.query_params
+    print(params, "params")
+
+    cov = params.get("cov", "ignore stables")
+    oracle_distort = float(params.get("oracle_distort", 0.05))
+
     cov_col, distort_col = st.columns(2)
     cov = cov_col.selectbox(
         "covariance:",
@@ -106,15 +113,18 @@ def price_shock_page():
             "sol + lst only",
             "meme",
         ],
-        index=0,
+        index=["ignore stables", "sol + lst only", "meme"].index(cov),
     )
 
     oracle_distort = distort_col.selectbox(
         "oracle distortion:",
         [0.05, 0.1, 0.2, 0.5, 1],
-        index=0,
+        index=[0.05, 0.1, 0.2, 0.5, 1].index(oracle_distort),
         help="step size of oracle distortions",
     )
+
+    # Update query parameters
+    st.query_params.update({"cov": cov, "oracle_distort": oracle_distort})
 
     result = api(
         "price-shock",
@@ -126,7 +136,15 @@ def price_shock_page():
         },
         as_json=True,
     )
-    st.write(result)
+    if "result" in result and result["result"] == "miss":
+        st.write("Fetching data for the first time...")
+        st.image(
+            "https://i.gifer.com/origin/8a/8a47f769c400b0b7d81a8f6f8e09a44a_w200.gif"
+        )
+        st.write("Check again in one minute!")
+        st.stop()
+
+    # st.write(result)
 
     fig = price_shock_plot(result, oracle_distort)
     st.plotly_chart(fig)

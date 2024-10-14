@@ -15,23 +15,44 @@ labels = [
 
 
 def asset_liab_matrix_page():
-    mode = st.selectbox("Options", options, format_func=lambda x: labels[x])
-    if mode is None:
-        mode = 0
+    params = st.query_params
+    mode = int(params.get("mode", 0))
+    perp_market_index = int(params.get("perp_market_index", 0))
+
+    mode = st.selectbox(
+        "Options", options, format_func=lambda x: labels[x], index=options.index(mode)
+    )
+    st.query_params.update({"mode": mode})
 
     perp_market_index = st.selectbox(
-        "Market index", [x.market_index for x in mainnet_perp_market_configs]
+        "Market index",
+        [x.market_index for x in mainnet_perp_market_configs],
+        index=[x.market_index for x in mainnet_perp_market_configs].index(
+            perp_market_index
+        ),
     )
-    if perp_market_index is None:
-        perp_market_index = 0
+    st.query_params.update({"perp_market_index": perp_market_index})
 
-    result = api(
-        "asset-liability",
-        "matrix",
-        "0" if mode is None else str(mode),
-        "0" if perp_market_index is None else str(perp_market_index),
-        as_json=True,
-    )
+    try:
+        result = api(
+            "asset-liability",
+            "matrix",
+            "0" if mode is None else str(mode),
+            "0" if perp_market_index is None else str(perp_market_index),
+            as_json=True,
+        )
+        if "result" in result and result["result"] == "miss":
+            st.write("Fetching data for the first time...")
+            st.image(
+                "https://i.gifer.com/origin/8a/8a47f769c400b0b7d81a8f6f8e09a44a_w200.gif"
+            )
+            st.write("Check again in one minute!")
+            st.stop()
+
+    except Exception as e:
+        st.write(e)
+        st.stop()
+
     res = pd.DataFrame(result["res"])
     df = pd.DataFrame(result["df"])
 
