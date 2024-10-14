@@ -6,10 +6,6 @@ import plotly.graph_objects as go
 import streamlit as st
 
 
-options = [0, 1, 2]
-labels = ["SOL-PERP", "BTC-PERP", "ETH-PERP"]
-
-
 def plot_liquidation_curves(liquidation_data):
     liquidations_long = liquidation_data["liquidations_long"]
     liquidations_short = liquidation_data["liquidations_short"]
@@ -106,17 +102,25 @@ def plot_liquidation_curves(liquidation_data):
     return long_fig, short_fig
 
 
-def plot_liquidation_curve():  # (vat: Vat):
+def liquidation_curves_page():
+
+    options = [0, 1]
+    labels = ["SOL-PERP", "BTC-PERP"]
     st.write("Liquidation Curves")
+
+    # Get query parameters
+    params = st.query_params
+    market_index = int(params.get("market_index", 0))
 
     market_index = st.selectbox(
         "Market",
         options,
         format_func=lambda x: labels[x],
+        index=options.index(market_index),
     )
 
-    if market_index is None:
-        market_index = 0
+    # Update query parameters
+    st.query_params.update({"market_index": market_index})
 
     liquidation_data = api(
         "liquidation", "liquidation-curve", str(market_index), as_json=True

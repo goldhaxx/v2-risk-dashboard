@@ -7,9 +7,9 @@ from lib.page import sidebar
 from page.asset_liability import asset_liab_matrix_page
 from page.backend import backend_page
 from page.health import health_page
+from page.liquidation_curves import liquidation_curves_page
 from page.orderbook import orderbook_page
 from page.price_shock import price_shock_page
-from sections.liquidation_curves import plot_liquidation_curve
 from sections.welcome import welcome_page
 import streamlit as st
 
@@ -53,7 +53,7 @@ if __name__ == "__main__":
             icon="📊",
         ),
         st.Page(
-            needs_backend(plot_liquidation_curve),
+            needs_backend(liquidation_curves_page),
             url_path="liquidation-curves",
             title="Liquidation Curves",
             icon="🌊",
