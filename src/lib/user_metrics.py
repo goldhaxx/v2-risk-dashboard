@@ -160,6 +160,7 @@ async def get_usermap_df(
         distorted_oracles = []
         cache_up = copy.deepcopy(_drift_client.account_subscriber.cache)
         cache_down = copy.deepcopy(_drift_client.account_subscriber.cache)
+
         for i, (key, val) in enumerate(
             _drift_client.account_subscriber.cache["oracle_price_data"].items()
         ):
