@@ -19,7 +19,11 @@ async def get_asset_liability_matrix(
     with waiting_for("Getting asset liability matrix"):
         res, df = await get_matrix(vat, mode, perp_market_index)
 
+    with waiting_for("Converting to dict"):
+        res_dict = res.to_dict()
+        df_dict = df.to_dict()
+
     return {
-        "res": res.to_dict(),
-        "df": df.to_dict(),
+        "res": res_dict,
+        "df": df_dict,
     }

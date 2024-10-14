@@ -23,7 +23,7 @@ load_dotenv()
 state = BackendState()
 
 
-@repeat_every(seconds=60 * 8, wait_first=True)
+@repeat_every(seconds=60 * 28, wait_first=True)
 async def repeatedly_retake_snapshot(state: BackendState) -> None:
     await state.take_pickle_snapshot()
 
@@ -43,10 +43,10 @@ async def repeatedly_clean_cache(state: BackendState) -> None:
             shutil.rmtree(pickle)
 
     cache_files = glob.glob("cache/*")
-    if len(cache_files) > 20:
-        print("cache folder has more than 20 files, deleting old ones")
+    if len(cache_files) > 35:
+        print("cache folder has more than 35 files, deleting old ones")
         cache_files.sort(key=os.path.getmtime)
-        for cache_file in cache_files[:-20]:
+        for cache_file in cache_files[:-35]:
             print(f"deleting {cache_file}")
             os.remove(cache_file)
 
@@ -65,13 +65,13 @@ async def lifespan(app: FastAPI):
         print("Loading cached vat")
         await state.load_pickle_snapshot(cached_vat_path[-1])
         await repeatedly_clean_cache(state)
-        await repeatedly_retake_snapshot(state)
+        # await repeatedly_retake_snapshot(state)
     else:
         print("No cached vat found, bootstrapping")
         await state.bootstrap()
         await state.take_pickle_snapshot()
         await repeatedly_clean_cache(state)
-        await repeatedly_retake_snapshot(state)
+        # await repeatedly_retake_snapshot(state)
     state.ready = True
     print("Starting app")
     yield
