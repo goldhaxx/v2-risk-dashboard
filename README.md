@@ -6,7 +6,7 @@ Quick Start:
 2. Create new venv `python -m venv .venv`
 3. Activate venv `.venv/bin/activate`
 4. Install dependencies `pip install -r requirements.txt`
-5. In one terminal, run the backend with `uvicorn backend.app:app --host 0.0.0.0 --port 8000` (this might take a while to start up)
+5. In one terminal, run the backend with `gunicorn backend.app:app -c gunicorn_config.py` (this might take a while to start up)
 6. In another terminal, run the frontend with `streamlit run src/main.py`
 
 Current Metrics:

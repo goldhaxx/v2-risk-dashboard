@@ -23,7 +23,7 @@ load_dotenv()
 state = BackendState()
 
 
-@repeat_every(seconds=60 * 28, wait_first=True)
+@repeat_every(seconds=60 * 15, wait_first=True)
 async def repeatedly_retake_snapshot(state: BackendState) -> None:
     await state.take_pickle_snapshot()
 
@@ -65,13 +65,13 @@ async def lifespan(app: FastAPI):
         print("Loading cached vat")
         await state.load_pickle_snapshot(cached_vat_path[-1])
         await repeatedly_clean_cache(state)
-        # await repeatedly_retake_snapshot(state)
+        await repeatedly_retake_snapshot(state)
     else:
         print("No cached vat found, bootstrapping")
         await state.bootstrap()
         await state.take_pickle_snapshot()
         await repeatedly_clean_cache(state)
-        # await repeatedly_retake_snapshot(state)
+        await repeatedly_retake_snapshot(state)
     state.ready = True
     print("Starting app")
     yield
