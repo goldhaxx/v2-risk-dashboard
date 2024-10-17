@@ -1,4 +1,5 @@
 import asyncio
+import glob
 import hashlib
 import os
 import pickle
@@ -32,7 +33,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         current_pickle = self.state.current_pickle_path
-        previous_pickle = self._get_previous_pickle(current_pickle)
+        previous_pickle = self._get_previous_pickle()
 
         # Try to serve data from the current (latest) pickle first
         current_cache_key = self._generate_cache_key(request, current_pickle)
@@ -143,18 +144,16 @@ class CacheMiddleware(BaseHTTPMiddleware):
         print("Hash input: ", hash_input)
         return hashlib.md5(hash_input.encode()).hexdigest()
 
-    def _get_previous_pickle(self, current_pickle: str) -> Optional[str]:
+    def _get_previous_pickle(self) -> Optional[str]:
         print("Attempting previous pickle")
-        pickle_dir = os.path.dirname(current_pickle)
-        pickles = sorted(
-            [f for f in os.listdir(pickle_dir)],
-            key=lambda x: os.path.getmtime(os.path.join(pickle_dir, x)),
-            reverse=True,
-        )
+        _pickle_paths = glob.glob(f"{self.state.current_pickle_path}/../*")
+        pickle_paths = sorted([os.path.realpath(dir) for dir in _pickle_paths])
+        print("Pickle paths: ", pickle_paths)
 
-        if len(pickles) > 1:
-            print("Previous pickle: ", os.path.join(pickle_dir, pickles[1]))
-            return os.path.join(pickle_dir, pickles[1])
+        if len(pickle_paths) > 1:
+            previous_pickle_path = pickle_paths[-2]
+            print("Previous pickle: ", previous_pickle_path)
+            return previous_pickle_path
 
         print("No previous pickle found")
         return None

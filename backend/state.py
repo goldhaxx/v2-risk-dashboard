@@ -104,7 +104,7 @@ class BackendState:
 
     async def load_pickle_snapshot(self, directory: str):
         pickle_map = load_newest_files(directory)
-        self.current_pickle_path = directory
+        self.current_pickle_path = os.path.realpath(directory)
         with waiting_for("unpickling"):
             await self.vat.unpickle(
                 users_filename=pickle_map["usermap"],

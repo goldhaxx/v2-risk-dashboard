@@ -28,17 +28,29 @@ async def repeatedly_retake_snapshot(state: BackendState) -> None:
     await state.take_pickle_snapshot()
 
 
-@repeat_every(seconds=60 * 8, wait_first=True)
-async def repeatedly_clean_cache(state: BackendState) -> None:
+def clean_cache(state: BackendState) -> None:
     if not os.path.exists("pickles"):
         print("pickles folder does not exist")
         return
 
     pickles = glob.glob("pickles/*")
-    if len(pickles) > 3:
-        print("pickles folder has more than 3 pickles, deleting old ones")
+
+    # check for pickle folders with less than 4 files (error in write)
+    incomplete_pickles = []
+    for pickle in pickles:
+        if len(glob.glob(f"{pickle}/*")) < 4:
+            incomplete_pickles.append(pickle)
+
+    for incomplete_pickle in incomplete_pickles:
+        print(f"deleting {incomplete_pickle}")
+        shutil.rmtree(incomplete_pickle)
+
+    pickles = glob.glob("pickles/*")
+
+    if len(pickles) > 5:
+        print("pickles folder has more than 5 pickles, deleting old ones")
         pickles.sort(key=os.path.getmtime)
-        for pickle in pickles[:-3]:
+        for pickle in pickles[:-5]:
             print(f"deleting {pickle}")
             shutil.rmtree(pickle)
 
@@ -51,6 +63,11 @@ async def repeatedly_clean_cache(state: BackendState) -> None:
             os.remove(cache_file)
 
 
+@repeat_every(seconds=60 * 8, wait_first=True)
+async def repeatedly_clean_cache(state: BackendState) -> None:
+    clean_cache(state)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     url = os.getenv("RPC_URL")
@@ -60,6 +77,7 @@ async def lifespan(app: FastAPI):
     state.initialize(url)
 
     print("Checking if cached vat exists")
+    clean_cache(state)
     cached_vat_path = sorted(glob.glob("pickles/*"))
     if len(cached_vat_path) > 0:
         print("Loading cached vat")
