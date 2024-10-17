@@ -2,13 +2,23 @@ from lib.api import api
 import plotly.express as px
 import streamlit as st
 
+from utils import fetch_result_with_retry
+
 
 def health_page():
-    health_distribution = api("health", "health_distribution")
-    largest_perp_positions = api("health", "largest_perp_positions")
-    most_levered_positions = api("health", "most_levered_perp_positions_above_1m")
-    largest_spot_borrows = api("health", "largest_spot_borrows")
-    most_levered_borrows = api("health", "most_levered_spot_borrows_above_1m")
+    health_distribution = fetch_result_with_retry(api, "health", "health_distribution")
+    largest_perp_positions = fetch_result_with_retry(
+        api, "health", "largest_perp_positions"
+    )
+    most_levered_positions = fetch_result_with_retry(
+        api, "health", "most_levered_perp_positions_above_1m"
+    )
+    largest_spot_borrows = fetch_result_with_retry(
+        api, "health", "largest_spot_borrows"
+    )
+    most_levered_borrows = fetch_result_with_retry(
+        api, "health", "most_levered_spot_borrows_above_1m"
+    )
 
     fig = px.bar(
         health_distribution,

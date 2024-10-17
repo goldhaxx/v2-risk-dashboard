@@ -1,9 +1,12 @@
 from collections import defaultdict
+import time
 
 from lib.api import api
 import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
+
+from utils import fetch_result_with_retry
 
 
 def plot_liquidation_curves(liquidation_data):
@@ -119,12 +122,24 @@ def liquidation_curves_page():
         index=options.index(market_index),
     )
 
-    # Update query parameters
     st.query_params.update({"market_index": market_index})
 
-    liquidation_data = api(
-        "liquidation", "liquidation-curve", str(market_index), as_json=True
-    )
+    try:
+        liquidation_data = fetch_result_with_retry(
+            api, "liquidation", "liquidation-curve", str(market_index), as_json=True
+        )
+        if liquidation_data is None:
+            st.write("Fetching data for the first time...")
+            st.image(
+                "https://i.gifer.com/origin/8a/8a47f769c400b0b7d81a8f6f8e09a44a_w200.gif"
+            )
+            st.write("Check again in one minute!")
+            st.stop()
+
+    except Exception as e:
+        st.write(e)
+        st.stop()
+
     (long_fig, short_fig) = plot_liquidation_curves(liquidation_data)
 
     long_col, short_col = st.columns([1, 1])

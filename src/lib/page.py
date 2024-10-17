@@ -2,22 +2,14 @@
 Common page functionality
 """
 
-import asyncio
-from asyncio import AbstractEventLoop
 from datetime import datetime
 import os
-import time
 
-from anchorpy import Wallet
-from driftpy.account_subscription_config import AccountSubscriptionConfig
-from driftpy.drift_client import DriftClient
 import humanize
 from lib.api import api
-from solana.rpc.async_api import AsyncClient
 import streamlit as st
 
-from utils import load_newest_files
-from utils import load_vat
+from utils import fetch_result_with_retry
 
 
 RPC_STATE_KEY = "rpc_url"
@@ -33,12 +25,12 @@ def header():
 def sidebar():
     st.sidebar.header("Data Information")
     try:
-        metadata = api("metadata", "", as_json=True)
+        metadata = fetch_result_with_retry(api, "metadata", "", as_json=True)
         pickle_file = metadata["pickle_file"]
         if pickle_file[-1] == "/":
             pickle_file = pickle_file[:-1]
         timestamp = pickle_file.split("-")[1:]
-        timestamp = datetime.strptime(" ".join(timestamp), "%Y %m %d %H %M %S")
+        timestamp = datetime.strptime(" ".join(timestamp[-6:]), "%Y %m %d %H %M %S")
         time_ago = datetime.now() - timestamp
         time_ago_str = humanize.precisedelta(
             time_ago,
