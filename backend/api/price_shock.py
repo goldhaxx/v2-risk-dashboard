@@ -1,3 +1,4 @@
+import functools
 from typing import Optional
 
 from backend.state import BackendRequest
@@ -11,18 +12,16 @@ from fastapi import APIRouter
 router = APIRouter()
 
 
-@router.get("/usermap")
-async def get_price_shock(
-    request: BackendRequest,
+@functools.lru_cache()
+async def _get_price_shock(
+    snapshot_path: str,
+    vat: Vat,
+    drift_client: DriftClient,
     oracle_distortion: float = 0.1,
     asset_group: Optional[str] = None,
     n_scenarios: int = 5,
-):
-    backend_state: BackendState = request.state.backend_state
-    vat: Vat = backend_state.vat
-    drift_client: DriftClient = backend_state.dc
-
-    result = get_user_leverages_for_price_shock(
+) -> dict:
+    return get_user_leverages_for_price_shock(
         drift_client,
         vat.users,
         oracle_distortion,
@@ -30,4 +29,19 @@ async def get_price_shock(
         n_scenarios,
     )
 
-    return result
+
+@router.get("/usermap")
+async def get_price_shock(
+    request: BackendRequest,
+    oracle_distortion: float = 0.1,
+    asset_group: Optional[str] = None,
+    n_scenarios: int = 5,
+):
+    return await _get_price_shock(
+        request.state.backend_state.current_pickle_path,
+        request.state.backend_state.vat,
+        request.state.backend_state.dc,
+        oracle_distortion,
+        asset_group,
+        n_scenarios,
+    )
