@@ -238,6 +238,7 @@ def get_user_leverages_for_price_shock(
     user_keys = list(user_map.user_map.keys())
     user_vals = list(user_map.values())
 
+    print(f"User keys : {len(user_keys)}")
     new_oracles_dat_up = []
     new_oracles_dat_down = []
     skipped_oracles = get_skipped_oracles(oracle_group)
@@ -246,7 +247,7 @@ def get_user_leverages_for_price_shock(
         new_oracles_dat_up.append({})
         new_oracles_dat_down.append({})
 
-    print("skipped oracles:", skipped_oracles)
+    print("Skipped oracles:", skipped_oracles)
 
     distorted_oracles = []
     cache_up = copy.deepcopy(drift_client.account_subscriber.cache)
@@ -258,6 +259,7 @@ def get_user_leverages_for_price_shock(
             new_oracles_dat_down[i][key] = copy.deepcopy(val)
         if oracle_group is not None and key in skipped_oracles:
             continue
+        
         distorted_oracles.append(key)
         for i in range(scenarios):
             oracle_distort_up = max(1 + oracle_distortion * (i + 1), 1)
