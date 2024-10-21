@@ -1,7 +1,10 @@
+import json
+
 from driftpy.constants.perp_markets import mainnet_perp_market_configs
 from driftpy.constants.spot_markets import mainnet_spot_market_configs
 from lib.api import api
 import pandas as pd
+from requests.exceptions import JSONDecodeError
 import streamlit as st
 
 
@@ -50,8 +53,17 @@ def asset_liab_matrix_page():
             st.stop()
 
     except Exception as e:
-        st.write(e)
-        st.stop()
+        if type(e) == JSONDecodeError:
+            print("HIT A JSONDecodeError...", e)
+            st.write("Fetching data for the first time...")
+            st.image(
+                "https://i.gifer.com/origin/8a/8a47f769c400b0b7d81a8f6f8e09a44a_w200.gif"
+            )
+            st.write("Check again in one minute!")
+            st.stop()
+        else:
+            st.write(e)
+            st.stop()
 
     res = pd.DataFrame(result["res"])
     df = pd.DataFrame(result["df"])

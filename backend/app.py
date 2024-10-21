@@ -52,7 +52,10 @@ def clean_cache(state: BackendState) -> None:
         pickles.sort(key=os.path.getmtime)
         for pickle in pickles[:-5]:
             print(f"deleting {pickle}")
-            shutil.rmtree(pickle)
+            try:
+                shutil.rmtree(pickle)
+            except Exception as e:
+                print(f"Error deleting {pickle}: {e}")
 
     cache_files = glob.glob("cache/*")
     if len(cache_files) > 35:
@@ -60,7 +63,10 @@ def clean_cache(state: BackendState) -> None:
         cache_files.sort(key=os.path.getmtime)
         for cache_file in cache_files[:-35]:
             print(f"deleting {cache_file}")
-            os.remove(cache_file)
+            try:
+                os.remove(cache_file)
+            except Exception as e:
+                print(f"Error deleting {cache_file}: {e}")
 
 
 @repeat_every(seconds=60 * 8, wait_first=True)

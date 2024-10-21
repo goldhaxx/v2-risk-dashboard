@@ -1,9 +1,9 @@
 import asyncio
 import glob
 import hashlib
+import json
 import os
-import pickle
-from typing import Any, Callable, Dict, Optional
+from typing import Callable, Dict, Optional
 
 from backend.state import BackendRequest
 from backend.state import BackendState
@@ -23,67 +23,67 @@ class CacheMiddleware(BaseHTTPMiddleware):
             os.makedirs(self.cache_dir)
 
     async def dispatch(self, request: BackendRequest, call_next: Callable):
-        if request.url.path.startswith("/api/snapshot"):
-            return await call_next(request)
-        if request.url.path.startswith("/api/price_shock"):
-            return await call_next(request)
         if not request.url.path.startswith("/api"):
-            return await call_next(request)
-        if self.state.current_pickle_path == "bootstrap":
             return await call_next(request)
 
         current_pickle = self.state.current_pickle_path
         previous_pickle = self._get_previous_pickle()
 
-        # Try to serve data from the current (latest) pickle first
         current_cache_key = self._generate_cache_key(request, current_pickle)
-        current_cache_file = os.path.join(self.cache_dir, f"{current_cache_key}.pkl")
+        current_cache_file = os.path.join(self.cache_dir, f"{current_cache_key}.json")
 
         if os.path.exists(current_cache_file):
-            print(f"Serving latest data for {request.url.path}")
-            with open(current_cache_file, "rb") as f:
-                response_data = pickle.load(f)
+            return self._serve_cached_response(current_cache_file, "Fresh")
 
-            return Response(
-                content=response_data["content"],
-                status_code=response_data["status_code"],
-                headers=dict(response_data["headers"], **{"X-Cache-Status": "Fresh"}),
-            )
-
-        # If no data in current pickle, try the previous pickle
         if previous_pickle:
             previous_cache_key = self._generate_cache_key(request, previous_pickle)
             previous_cache_file = os.path.join(
-                self.cache_dir, f"{previous_cache_key}.pkl"
+                self.cache_dir, f"{previous_cache_key}.json"
             )
 
             if os.path.exists(previous_cache_file):
-                print(f"Serving stale data for {request.url.path}")
-                with open(previous_cache_file, "rb") as f:
-                    response_data = pickle.load(f)
-
-                # Prepare background task
-                background_tasks = BackgroundTasks()
-                background_tasks.add_task(
-                    self._fetch_and_cache,
+                return await self._serve_stale_response(
+                    previous_cache_file,
                     request,
                     call_next,
                     current_cache_key,
                     current_cache_file,
                 )
 
-                response = Response(
-                    content=response_data["content"],
-                    status_code=response_data["status_code"],
-                    headers=dict(
-                        response_data["headers"], **{"X-Cache-Status": "Stale"}
-                    ),
-                )
-                response.background = background_tasks
-                return response
+        return await self._serve_miss_response(
+            request, call_next, current_cache_key, current_cache_file
+        )
 
-        # If no data available, return an empty response and fetch fresh data in the background
-        print(f"No data available for {request.url.path}")
+    def _serve_cached_response(self, cache_file: str, cache_status: str):
+        print(f"Serving {cache_status.lower()} data")
+        with open(cache_file, "r") as f:
+            response_data = json.load(f)
+
+        content = json.dumps(response_data["content"]).encode("utf-8")
+        headers = {
+            k: v
+            for k, v in response_data["headers"].items()
+            if k.lower() != "content-length"
+        }
+        headers["Content-Length"] = str(len(content))
+        headers["X-Cache-Status"] = cache_status
+
+        return Response(
+            content=content,
+            status_code=response_data["status_code"],
+            headers=headers,
+            media_type="application/json",
+        )
+
+    async def _serve_stale_response(
+        self,
+        cache_file: str,
+        request: BackendRequest,
+        call_next: Callable,
+        current_cache_key: str,
+        current_cache_file: str,
+    ):
+        response = self._serve_cached_response(cache_file, "Stale")
         background_tasks = BackgroundTasks()
         background_tasks.add_task(
             self._fetch_and_cache,
@@ -92,12 +92,32 @@ class CacheMiddleware(BaseHTTPMiddleware):
             current_cache_key,
             current_cache_file,
         )
+        response.background = background_tasks
+        return response
 
-        # Return an empty response immediately
+    async def _serve_miss_response(
+        self,
+        request: BackendRequest,
+        call_next: Callable,
+        cache_key: str,
+        cache_file: str,
+    ):
+        print(f"No data available for {request.url.path}")
+        background_tasks = BackgroundTasks()
+        background_tasks.add_task(
+            self._fetch_and_cache,
+            request,
+            call_next,
+            cache_key,
+            cache_file,
+        )
+        content = json.dumps({"result": "miss"}).encode("utf-8")
+
         response = Response(
-            content='{"result": "miss"}',
-            status_code=200,  # No Content
-            headers={"X-Cache-Status": "Miss"},
+            content=content,
+            status_code=200,
+            headers={"X-Cache-Status": "Miss", "Content-Length": str(len(content))},
+            media_type="application/json",
         )
         response.background = background_tasks
         return response
@@ -120,15 +140,21 @@ class CacheMiddleware(BaseHTTPMiddleware):
                     response_body = b""
                     async for chunk in response.body_iterator:
                         response_body += chunk
+
+                    body_content = json.loads(response_body.decode())
                     response_data = {
-                        "content": response_body,
+                        "content": body_content,
                         "status_code": response.status_code,
-                        "headers": dict(response.headers),
+                        "headers": {
+                            k: v
+                            for k, v in response.headers.items()
+                            if k.lower() != "content-length"
+                        },
                     }
 
                     os.makedirs(os.path.dirname(cache_file), exist_ok=True)
-                    with open(cache_file, "wb") as f:
-                        pickle.dump(response_data, f)
+                    with open(cache_file, "w") as f:
+                        json.dump(response_data, f)
                     print(f"Cached fresh data for {request.url.path}")
                 else:
                     print(
