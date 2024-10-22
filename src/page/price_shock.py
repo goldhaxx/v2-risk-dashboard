@@ -126,16 +126,21 @@ def price_shock_page():
     # Update query parameters
     st.query_params.update({"cov": cov, "oracle_distort": oracle_distort})
 
-    result = api(
-        "price-shock",
-        "usermap",
-        params={
-            "asset_group": cov,
-            "oracle_distortion": oracle_distort,
-            "n_scenarios": 5,
-        },
-        as_json=True,
-    )
+    try:
+        result = api(
+            "price-shock",
+            "usermap",
+            params={
+                "asset_group": cov,
+                "oracle_distortion": oracle_distort,
+                "n_scenarios": 5,
+            },
+            as_json=True,
+        )
+        # print("RESULT", result)
+    except Exception as e:
+        print("HIT AN EXCEPTION...", e)
+
     if "result" in result and result["result"] == "miss":
         st.write("Fetching data for the first time...")
         st.image(
@@ -143,8 +148,6 @@ def price_shock_page():
         )
         st.write("Check again in one minute!")
         st.stop()
-
-    # st.write(result)
 
     fig = price_shock_plot(result, oracle_distort)
     st.plotly_chart(fig)

@@ -3,7 +3,7 @@ import glob
 import hashlib
 import json
 import os
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, List, Optional
 
 from backend.state import BackendRequest
 from backend.state import BackendState
@@ -27,7 +27,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         current_pickle = self.state.current_pickle_path
-        previous_pickle = self._get_previous_pickle()
+        previous_pickles = self._get_previous_pickles(4)  # Get last 4 pickles
 
         current_cache_key = self._generate_cache_key(request, current_pickle)
         current_cache_file = os.path.join(self.cache_dir, f"{current_cache_key}.json")
@@ -35,7 +35,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
         if os.path.exists(current_cache_file):
             return self._serve_cached_response(current_cache_file, "Fresh")
 
-        if previous_pickle:
+        for previous_pickle in previous_pickles:
             previous_cache_key = self._generate_cache_key(request, previous_pickle)
             previous_cache_file = os.path.join(
                 self.cache_dir, f"{previous_cache_key}.json"
@@ -170,16 +170,14 @@ class CacheMiddleware(BaseHTTPMiddleware):
         print("Hash input: ", hash_input)
         return hashlib.md5(hash_input.encode()).hexdigest()
 
-    def _get_previous_pickle(self) -> Optional[str]:
-        print("Attempting previous pickle")
+    def _get_previous_pickles(self, num_pickles: int = 4) -> List[str]:
+        print(f"Attempting to get previous {num_pickles} pickles")
         _pickle_paths = glob.glob(f"{self.state.current_pickle_path}/../*")
-        pickle_paths = sorted([os.path.realpath(dir) for dir in _pickle_paths])
+        pickle_paths = sorted(
+            [os.path.realpath(dir) for dir in _pickle_paths], reverse=True
+        )
         print("Pickle paths: ", pickle_paths)
 
-        if len(pickle_paths) > 1:
-            previous_pickle_path = pickle_paths[-2]
-            print("Previous pickle: ", previous_pickle_path)
-            return previous_pickle_path
-
-        print("No previous pickle found")
-        return None
+        previous_pickles = pickle_paths[1 : num_pickles + 1]
+        print(f"Previous {len(previous_pickles)} pickles: ", previous_pickles)
+        return previous_pickles

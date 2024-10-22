@@ -23,7 +23,7 @@ load_dotenv()
 state = BackendState()
 
 
-@repeat_every(seconds=60 * 15, wait_first=True)
+@repeat_every(seconds=60 * 60, wait_first=True)
 async def repeatedly_retake_snapshot(state: BackendState) -> None:
     await state.take_pickle_snapshot()
 
@@ -35,15 +35,18 @@ def clean_cache(state: BackendState) -> None:
 
     pickles = glob.glob("pickles/*")
 
-    # check for pickle folders with less than 4 files (error in write)
+    # check for pickle folders with less than 8 files (error in write)
     incomplete_pickles = []
     for pickle in pickles:
-        if len(glob.glob(f"{pickle}/*")) < 4:
+        if len(glob.glob(f"{pickle}/*")) < 8:
             incomplete_pickles.append(pickle)
 
     for incomplete_pickle in incomplete_pickles:
         print(f"deleting {incomplete_pickle}")
-        shutil.rmtree(incomplete_pickle)
+        try:
+            shutil.rmtree(incomplete_pickle)
+        except Exception as e:
+            print(f"Error deleting {incomplete_pickle}: {e}")
 
     pickles = glob.glob("pickles/*")
 
