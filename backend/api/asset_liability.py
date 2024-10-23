@@ -1,3 +1,5 @@
+import functools
+
 from backend.state import BackendRequest
 from backend.state import BackendState
 from backend.utils.matrix import get_matrix
@@ -9,6 +11,7 @@ from fastapi import APIRouter
 router = APIRouter()
 
 
+@functools.lru_cache()
 async def _get_asset_liability_matrix(
     snapshot_path: str,
     vat: Vat,

@@ -35,10 +35,10 @@ def clean_cache(state: BackendState) -> None:
 
     pickles = glob.glob("pickles/*")
 
-    # check for pickle folders with less than 8 files (error in write)
+    # check for pickle folders with less than 4 files (error in write)
     incomplete_pickles = []
     for pickle in pickles:
-        if len(glob.glob(f"{pickle}/*")) < 8:
+        if len(glob.glob(f"{pickle}/*")) < 4:
             incomplete_pickles.append(pickle)
 
     for incomplete_pickle in incomplete_pickles:
@@ -91,15 +91,27 @@ async def lifespan(app: FastAPI):
     if len(cached_vat_path) > 0:
         print("Loading cached vat")
         await state.load_pickle_snapshot(cached_vat_path[-1])
-        await repeatedly_clean_cache(state)
-        await repeatedly_retake_snapshot(state)
+        # await repeatedly_clean_cache(state)
+        # await repeatedly_retake_snapshot(state)
     else:
         print("No cached vat found, bootstrapping")
         await state.bootstrap()
         await state.take_pickle_snapshot()
-        await repeatedly_clean_cache(state)
-        await repeatedly_retake_snapshot(state)
+        # await repeatedly_clean_cache(state)
+        # await repeatedly_retake_snapshot(state)
     state.ready = True
+    # print("Checking price shock")
+    # await price_shock._get_price_shock(
+    #     state.current_pickle_path, state.vat, state.dc, 0.05, "ignore stables", 5
+    # )
+    # print("Checking asset liability matrix")
+    # await asset_liability._get_asset_liability_matrix(
+    #     state.current_pickle_path, state.vat, 0, 0
+    # )
+    import random
+    import time
+
+    time.sleep(random.randint(1, 10))
     print("Starting app")
     yield
 

@@ -75,6 +75,8 @@ class BackendState:
             self.spot_map,
             self.perp_map,
         )
+        self.ready = False
+        self.current_pickle_path = "bootstrap"
 
     async def bootstrap(self):
         with waiting_for("drift client"):

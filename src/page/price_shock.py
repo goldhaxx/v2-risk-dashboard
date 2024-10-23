@@ -60,18 +60,24 @@ def price_shock_plot(user_leverages, oracle_distort: float):
     num_scenarios = len(levs["leverages_down"])
     oracle_moves = generate_oracle_moves(num_scenarios, oracle_distort)
 
+    # Create and sort the DataFrame BEFORE plotting
     df_plot = pd.DataFrame(
         {
             "Oracle Move (%)": oracle_moves,
             "Total Bankruptcy ($)": total_bankruptcies,
             "Spot Bankruptcy ($)": spot_bankruptcies,
         }
-    ).sort_values("Oracle Move (%)")
+    )
 
+    # Sort by Oracle Move to ensure correct line connection order
+    df_plot = df_plot.sort_values("Oracle Move (%)")
+
+    # Calculate Perp Bankruptcy AFTER sorting
     df_plot["Perp Bankruptcy ($)"] = (
         df_plot["Total Bankruptcy ($)"] - df_plot["Spot Bankruptcy ($)"]
     )
 
+    # Create the figure with sorted data
     fig = go.Figure()
     for column in [
         "Total Bankruptcy ($)",
@@ -92,6 +98,7 @@ def price_shock_plot(user_leverages, oracle_distort: float):
         xaxis_title="Oracle Move (%)",
         yaxis_title="Bankruptcy ($)",
         legend_title="Bankruptcy Type",
+        template="plotly_dark",
     )
 
     return fig
@@ -151,19 +158,14 @@ def price_shock_page():
 
     fig = price_shock_plot(result, oracle_distort)
     st.plotly_chart(fig)
-
-    oracle_down_max = pd.DataFrame(
-        result["leverages_down"][-1][-1], index=result["user_keys"]
-    )
+    oracle_down_max = pd.DataFrame(result["leverages_down"][-1])
     with st.expander(
         str("oracle down max bankrupt count=")
         + str(len(oracle_down_max[oracle_down_max.net_usd_value < 0]))
     ):
         st.dataframe(oracle_down_max)
 
-    oracle_up_max = pd.DataFrame(
-        result["leverages_up"][-1][-1], index=result["user_keys"]
-    )
+    oracle_up_max = pd.DataFrame(result["leverages_up"][-1], index=result["user_keys"])
     with st.expander(
         str("oracle up max bankrupt count=")
         + str(len(oracle_up_max[oracle_up_max.net_usd_value < 0]))
