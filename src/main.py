@@ -5,11 +5,14 @@ from lib.page import header
 from lib.page import needs_backend
 from lib.page import sidebar
 from page.asset_liability import asset_liab_matrix_page
+from page.asset_liability_cached import asset_liab_matrix_cached_page
 from page.backend import backend_page
 from page.health import health_page
+from page.health_cached import health_cached_page
 from page.liquidation_curves import liquidation_curves_page
 from page.orderbook import orderbook_page
 from page.price_shock import price_shock_page
+from page.price_shock_cached import price_shock_cached_page
 from sections.welcome import welcome_page
 import streamlit as st
 
@@ -57,6 +60,24 @@ if __name__ == "__main__":
             url_path="liquidation-curves",
             title="Liquidation Curves",
             icon="🌊",
+        ),
+        st.Page(
+            health_cached_page,
+            url_path="health-cached",
+            title="Health (Cached)",
+            icon="🏥",
+        ),
+        st.Page(
+            price_shock_cached_page,
+            url_path="price-shock-cached",
+            title="Price Shock (Cached)",
+            icon="💸",
+        ),
+        st.Page(
+            asset_liab_matrix_cached_page,
+            url_path="asset-liab-matrix-cached",
+            title="Asset-Liab Matrix (Cached)",
+            icon="📊",
         ),
     ]
     if os.getenv("DEV"):

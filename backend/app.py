@@ -60,6 +60,7 @@ def clean_cache(state: BackendState) -> None:
             except Exception as e:
                 print(f"Error deleting {pickle}: {e}")
 
+    # Clean regular cache
     cache_files = glob.glob("cache/*")
     if len(cache_files) > 35:
         print("cache folder has more than 35 files, deleting old ones")
@@ -70,6 +71,18 @@ def clean_cache(state: BackendState) -> None:
                 os.remove(cache_file)
             except Exception as e:
                 print(f"Error deleting {cache_file}: {e}")
+
+    # Clean ucache
+    ucache_files = glob.glob("ucache/*")
+    if len(ucache_files) > 35:
+        print("ucache folder has more than 35 files, deleting old ones")
+        ucache_files.sort(key=os.path.getmtime)
+        for ucache_file in ucache_files[:-35]:
+            print(f"deleting {ucache_file}")
+            try:
+                os.remove(ucache_file)
+            except Exception as e:
+                print(f"Error deleting {ucache_file}: {e}")
 
 
 @repeat_every(seconds=60 * 8, wait_first=True)

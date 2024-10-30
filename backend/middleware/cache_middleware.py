@@ -18,9 +18,12 @@ class CacheMiddleware(BaseHTTPMiddleware):
         super().__init__(app)
         self.state = state
         self.cache_dir = cache_dir
+        self.ucache_dir = "ucache"
         self.revalidation_locks: Dict[str, asyncio.Lock] = {}
         if not os.path.exists(self.cache_dir):
             os.makedirs(self.cache_dir)
+        if not os.path.exists(self.ucache_dir):
+            os.makedirs(self.ucache_dir)
 
     async def dispatch(self, request: BackendRequest, call_next: Callable):
         if not request.url.path.startswith("/api"):
@@ -155,7 +158,22 @@ class CacheMiddleware(BaseHTTPMiddleware):
                     os.makedirs(os.path.dirname(cache_file), exist_ok=True)
                     with open(cache_file, "w") as f:
                         json.dump(response_data, f)
-                    print(f"Cached fresh data for {request.url.path}")
+
+                    ucache_key = f"{request.method}{request.url.path}"
+                    if request.url.query:
+                        safe_query = request.url.query.replace("&", "_").replace(
+                            "=", "-"
+                        )
+                        ucache_key = f"{ucache_key}__{safe_query}"
+                    ucache_key = ucache_key.replace("/", "_")
+
+                    ucache_file = os.path.join(self.ucache_dir, f"{ucache_key}.json")
+                    with open(ucache_file, "w") as f:
+                        json.dump(response_data, f)
+
+                    print(
+                        f"Cached fresh data for {request.url.path} with query {request.url.query}"
+                    )
                 else:
                     print(
                         f"Failed to cache data for {request.url.path}. Status code: {response.status_code}"
