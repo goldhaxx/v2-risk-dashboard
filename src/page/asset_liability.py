@@ -40,8 +40,7 @@ def asset_liab_matrix_page():
         result = api(
             "asset-liability",
             "matrix",
-            "0" if mode is None else str(mode),
-            "0" if perp_market_index is None else str(perp_market_index),
+            params=params,
             as_json=True,
         )
         if "result" in result and result["result"] == "miss":

@@ -24,7 +24,7 @@ if __name__ == "__main__":
     header()
     sidebar()
 
-    pages = [
+    main_pages = [
         st.Page(
             welcome_page,
             url_path="welcome",
@@ -61,6 +61,8 @@ if __name__ == "__main__":
             title="Liquidation Curves",
             icon="🌊",
         ),
+    ]
+    cached_pages = [
         st.Page(
             health_cached_page,
             url_path="health-cached",
@@ -81,7 +83,7 @@ if __name__ == "__main__":
         ),
     ]
     if os.getenv("DEV"):
-        pages.append(
+        main_pages.append(
             st.Page(
                 needs_backend(backend_page),
                 url_path="backend",
@@ -90,5 +92,10 @@ if __name__ == "__main__":
             )
         )
 
-    pg = st.navigation(pages)
+    pg = st.navigation(
+        {
+            "Main": main_pages,
+            "Cached": cached_pages,
+        }
+    )
     pg.run()

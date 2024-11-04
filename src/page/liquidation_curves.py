@@ -126,7 +126,7 @@ def liquidation_curves_page():
 
     try:
         liquidation_data = fetch_result_with_retry(
-            api, "liquidation", "liquidation-curve", str(market_index), as_json=True
+            api, "liquidation", "liquidation-curve", params=params, as_json=True
         )
         if liquidation_data is None:
             st.write("Fetching data for the first time...")

@@ -16,10 +16,6 @@ R2_PREFIX = "https://pub" + "-7dc8852b9fd5407a92614093e1f73280.r" + "2.dev"
 def api(
     section: str,
     path: str,
-    path_extra_1: Optional[str] = None,
-    path_extra_2: Optional[
-        str
-    ] = None,  # TODO: this is pretty silly, but it works for now
     as_json: bool = False,
     params: Optional[dict] = None,
 ):
@@ -38,10 +34,6 @@ def api(
     Returns:
         The response from the API.
     """
-    if path_extra_1:
-        path = f"{path}/{path_extra_1}"
-    if path_extra_2:
-        path = f"{path}/{path_extra_2}"
     if params:
         response = requests.get(f"{BASE_URL}/api/{section}/{path}", params=params)
     else:
