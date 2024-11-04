@@ -30,7 +30,7 @@ async def _get_asset_liability_matrix(
     }
 
 
-@router.get("/matrix/{mode}/{perp_market_index}")
+@router.get("/matrix")
 async def get_asset_liability_matrix(
     request: BackendRequest, mode: int, perp_market_index: int
 ):

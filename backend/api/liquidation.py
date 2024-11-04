@@ -8,7 +8,7 @@ from fastapi import APIRouter
 router = APIRouter()
 
 
-@router.get("/liquidation-curve/{market_index}")
+@router.get("/liquidation-curve")
 def get_liquidation_curve(request: BackendRequest, market_index: int):
     vat: Vat = request.state.backend_state.vat
     liquidations_long: list[tuple[float, float]] = []
