@@ -5,3 +5,4 @@ venv
 .venv
 pickles/*
 cache
+ignore
