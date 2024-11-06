@@ -61,16 +61,16 @@ async def get_matrix(
             (
                 f"perp_{perp_market_index}_long",
                 lambda v: (
-                    v / row["spot_asset"] * row["net_p"][perp_market_index]
-                    if v > 0 and row["net_p"][0] > 0
+                    v / row["spot_asset"] * float(row["net_p"][perp_market_index])
+                    if v > 0 and float(row["net_p"][perp_market_index]) > 0
                     else 0
                 ),
             ),
             (
                 f"perp_{perp_market_index}_short",
                 lambda v: (
-                    v / row["spot_asset"] * row["net_p"][perp_market_index]
-                    if v > 0 and row["net_p"][perp_market_index] < 0
+                    v / row["spot_asset"] * float(row["net_p"][perp_market_index])
+                    if v > 0 and float(row["net_p"][perp_market_index]) < 0
                     else 0
                 ),
             ),

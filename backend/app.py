@@ -105,13 +105,13 @@ async def lifespan(app: FastAPI):
         print("Loading cached vat")
         await state.load_pickle_snapshot(cached_vat_path[-1])
         # await repeatedly_clean_cache(state)
-        # await repeatedly_retake_snapshot(state)
+        await repeatedly_retake_snapshot(state)
     else:
         print("No cached vat found, bootstrapping")
         await state.bootstrap()
         await state.take_pickle_snapshot()
         # await repeatedly_clean_cache(state)
-        # await repeatedly_retake_snapshot(state)
+        await repeatedly_retake_snapshot(state)
     state.ready = True
     # print("Checking price shock")
     # await price_shock._get_price_shock(
