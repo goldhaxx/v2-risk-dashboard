@@ -11,11 +11,11 @@ router = APIRouter()
 @router.get("/liquidation-curve")
 def get_liquidation_curve(request: BackendRequest, market_index: int):
     vat: Vat = request.state.backend_state.vat
-    liquidations_long: list[tuple[float, float]] = []
-    liquidations_short: list[tuple[float, float]] = []
+    liquidations_long: list[tuple[float, float, str]] = []
+    liquidations_short: list[tuple[float, float, str]] = []
     market_price = vat.perp_oracles.get(market_index)
     market_price_ui = market_price.price / PRICE_PRECISION
-    for user in vat.users.user_map.values():
+    for pubkey, user in vat.users.user_map.items():
         perp_position = user.get_perp_position(market_index)
         if perp_position is not None:
             liquidation_price = user.get_perp_liq_price(market_index)
@@ -29,9 +29,13 @@ def get_liquidation_curve(request: BackendRequest, market_index: int):
                 if is_zero:
                     continue
                 if is_short and liquidation_price_ui > market_price_ui:
-                    liquidations_short.append((liquidation_price_ui, position_notional))
+                    liquidations_short.append(
+                        (liquidation_price_ui, position_notional, str(pubkey))
+                    )
                 elif is_long and liquidation_price_ui < market_price_ui:
-                    liquidations_long.append((liquidation_price_ui, position_notional))
+                    liquidations_long.append(
+                        (liquidation_price_ui, position_notional, str(pubkey))
+                    )
                 else:
                     pass
 
