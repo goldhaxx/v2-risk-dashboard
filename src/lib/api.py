@@ -58,11 +58,11 @@ def api2(url: str, params: Optional[dict] = None) -> dict:
     print("SERVING FROM R2")
 
     try:
-        # Convert URL path to R2 filename format
         cache_key = f"GET/api/{url}".replace("/", "_")
 
         # Handle query parameters exactly as they appear in the URL
         if params:
+            print(f"Params: {params}")
             # Convert params to URL query string format
             query_parts = []
             for k, v in params.items():

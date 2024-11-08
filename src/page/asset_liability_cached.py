@@ -37,8 +37,10 @@ def asset_liab_matrix_cached_page():
     st.query_params.update({"perp_market_index": perp_market_index})
 
     try:
-        url = f"asset-liability/matrix/{0 if mode is None else mode}/{0 if perp_market_index is None else perp_market_index}"
-        result = api2(url)
+        result = api2(
+            "asset-liability/matrix",
+            params=params,
+        )
         if "result" in result and result["result"] == "miss":
             st.write("Fetching data for the first time...")
             st.image(
