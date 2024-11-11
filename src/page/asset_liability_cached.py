@@ -33,8 +33,14 @@ def asset_liab_matrix_cached_page():
         index=[x.market_index for x in mainnet_perp_market_configs].index(
             perp_market_index
         ),
+        format_func=lambda x: f"{x} ({mainnet_perp_market_configs[int(x)].symbol})",
     )
     st.query_params.update({"perp_market_index": perp_market_index})
+
+    # show_leverage_filter = st.toggle("Filter by Effective Leverage", value=False)
+    # min_leverage = 0.0
+    # if show_leverage_filter:
+    #     min_leverage = st.slider("Minimum Effective Leverage", 0.0, 100.0, 0.0, 1.0)
 
     try:
         result = api2(
@@ -65,6 +71,9 @@ def asset_liab_matrix_cached_page():
     res = pd.DataFrame(result["res"])
     df = pd.DataFrame(result["df"])
 
+    # if show_leverage_filter:
+    #     res = res[res["effective_leverage"] >= min_leverage]
+
     st.write(f"{df.shape[0]} users for scenario")
     st.write(res)
 
@@ -73,7 +82,8 @@ def asset_liab_matrix_cached_page():
 
     for idx, tab in enumerate(tabs[1:]):
         important_cols = [x for x in df.columns if "spot_" + str(idx) in x]
-        toshow = df[["spot_asset", "net_usd_value"] + important_cols]
+        # Sort columns in logical order: all, deposit, borrow
+        toshow = df[["user_key", "spot_asset", "net_usd_value"] + important_cols]
         toshow = toshow[toshow[important_cols].abs().sum(axis=1) != 0].sort_values(
             by="spot_" + str(idx) + "_all", ascending=False
         )

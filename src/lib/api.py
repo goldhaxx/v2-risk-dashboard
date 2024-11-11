@@ -55,7 +55,7 @@ def api2(url: str, params: Optional[dict] = None) -> dict:
     Example with params: /api/price-shock/usermap?asset_group=ignore+stables&oracle_distortion=0.05
         -> GET_api_price-shock_usermap__asset_group-ignore+stables_oracle_distortion-0.05.json
     """
-    print("SERVING FROM R2")
+    print("===> SERVING FROM R2")
 
     try:
         cache_key = f"GET/api/{url}".replace("/", "_")
