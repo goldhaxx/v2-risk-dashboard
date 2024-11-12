@@ -1,8 +1,6 @@
-import functools
 from typing import Optional
 
 from backend.state import BackendRequest
-from backend.state import BackendState
 from backend.utils.user_metrics import get_user_leverages_for_price_shock
 from driftpy.drift_client import DriftClient
 from driftpy.pickle.vat import Vat
