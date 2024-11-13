@@ -132,15 +132,16 @@ def price_shock_cached_page():
 
     # Update query parameters
     st.query_params.update({"cov": cov, "oracle_distort": oracle_distort})
-
+    n_scenarios = 5
     try:
         result = api2(
             "price-shock/usermap",
-            params={
+            _params={
                 "asset_group": cov,
                 "oracle_distortion": oracle_distort,
-                "n_scenarios": 5,
+                "n_scenarios": n_scenarios,
             },
+            key=f"price-shock/usermap_{cov}_{oracle_distort}_{n_scenarios}",
         )
     except Exception as e:
         print("HIT AN EXCEPTION...", e)

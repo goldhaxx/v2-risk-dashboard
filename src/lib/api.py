@@ -5,6 +5,7 @@ from typing import Optional
 from dotenv import load_dotenv
 import pandas as pd
 import requests
+import streamlit as st
 
 
 load_dotenv()
@@ -48,7 +49,8 @@ def api(
         return response.json()
 
 
-def api2(url: str, params: Optional[dict] = None) -> dict:
+@st.cache_data(ttl=1000)
+def api2(url: str, _params: Optional[dict] = None, key: str = "") -> dict:
     """
     Fetch data from R2 storage using the simplified naming scheme.
     Example: /api/health/health_distribution -> GET_api_health_health_distribution.json
@@ -61,12 +63,10 @@ def api2(url: str, params: Optional[dict] = None) -> dict:
         cache_key = f"GET/api/{url}".replace("/", "_")
 
         # Handle query parameters exactly as they appear in the URL
-        if params:
-            print(f"Params: {params}")
-            # Convert params to URL query string format
+        if _params:
+            print(f"Params: {_params}")
             query_parts = []
-            for k, v in params.items():
-                # Replace space with + to match URL encoding
+            for k, v in _params.items():
                 if isinstance(v, str):
                     v = v.replace(" ", "%2B")
                 query_parts.append(f"{k}-{v}")

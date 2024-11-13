@@ -37,15 +37,11 @@ def asset_liab_matrix_cached_page():
     )
     st.query_params.update({"perp_market_index": perp_market_index})
 
-    # show_leverage_filter = st.toggle("Filter by Effective Leverage", value=False)
-    # min_leverage = 0.0
-    # if show_leverage_filter:
-    #     min_leverage = st.slider("Minimum Effective Leverage", 0.0, 100.0, 0.0, 1.0)
-
     try:
         result = api2(
             "asset-liability/matrix",
-            params=params,
+            _params=params,
+            key=f"asset-liability/matrix_{mode}_{perp_market_index}",
         )
         if "result" in result and result["result"] == "miss":
             st.write("Fetching data for the first time...")
@@ -78,11 +74,25 @@ def asset_liab_matrix_cached_page():
     st.write(res)
 
     tabs = st.tabs(["FULL"] + [x.symbol for x in mainnet_spot_market_configs])
-    tabs[0].dataframe(df, hide_index=True)
+    with tabs[0]:
+        min_leverage = st.slider("Filter by minimum leverage", 0.0, 110.0, 0.0, 1.0)
+        filtered_df = df[df["leverage"] >= min_leverage].sort_values(
+            "leverage", ascending=False
+        )
+        st.write(
+            f"There are **{len(filtered_df)}** users with this **{min_leverage}x** leverage or more"
+        )
+        with st.expander("Totals"):
+            st.write(f"Total USD value: **{filtered_df['net_usd_value'].sum():,.2f}**")
+            st.write(f"Total collateral: **{filtered_df['spot_asset'].sum():,.2f}**")
+            st.write(
+                f"Total liabilities: **{filtered_df['spot_liability'].sum():,.2f}**"
+            )
+        st.dataframe(filtered_df, hide_index=True)
 
     for idx, tab in enumerate(tabs[1:]):
         important_cols = [x for x in df.columns if "spot_" + str(idx) in x]
-        # Sort columns in logical order: all, deposit, borrow
+
         toshow = df[["user_key", "spot_asset", "net_usd_value"] + important_cols]
         toshow = toshow[toshow[important_cols].abs().sum(axis=1) != 0].sort_values(
             by="spot_" + str(idx) + "_all", ascending=False

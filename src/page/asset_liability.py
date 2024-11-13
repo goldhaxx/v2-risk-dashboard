@@ -71,7 +71,14 @@ def asset_liab_matrix_page():
     st.write(res)
 
     tabs = st.tabs(["FULL"] + [x.symbol for x in mainnet_spot_market_configs])
-    tabs[0].dataframe(df, hide_index=True)
+
+    # Add leverage filter to FULL tab
+    with tabs[0]:
+        min_leverage = st.slider("Filter by minimum leverage", 0.0, 50.0, 0.0, 0.5)
+        filtered_df = df[df["leverage"] >= min_leverage].sort_values(
+            "leverage", ascending=False
+        )
+        st.dataframe(filtered_df, hide_index=True)
 
     for idx, tab in enumerate(tabs[1:]):
         important_cols = [x for x in df.columns if "spot_" + str(idx) in x]
