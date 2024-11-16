@@ -65,6 +65,7 @@ def get_stable_metrics(x: DriftUser):
     net_usd_value = (net_spot_market_value + unrealized_pnl) / QUOTE_PRECISION
     return {
         "user_key": x.user_public_key,
+        "is_high_leverage": x.is_high_leverage_mode(),
         "leverage": x.get_leverage() / MARGIN_PRECISION,
         "upnl": unrealized_pnl / QUOTE_PRECISION,
         "net_usd_value": net_usd_value,
@@ -259,7 +260,7 @@ def get_user_leverages_for_price_shock(
             new_oracles_dat_down[i][key] = copy.deepcopy(val)
         if oracle_group is not None and key in skipped_oracles:
             continue
-        
+
         distorted_oracles.append(key)
         for i in range(scenarios):
             oracle_distort_up = max(1 + oracle_distortion * (i + 1), 1)

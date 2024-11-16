@@ -37,6 +37,7 @@ class BackendState:
     stats_map: UserStatsMap
 
     current_pickle_path: str
+    last_oracle_slot: int
     vat: Vat
     ready: bool
 
@@ -116,6 +117,8 @@ class BackendState:
                 spot_oracles_filename=pickle_map["spotoracles"],
                 perp_oracles_filename=pickle_map["perporacles"],
             )
+
+        self.last_oracle_slot = pickle_map["perporacles"].split("_")[-1].split(".")[0]
         return pickle_map
 
 
