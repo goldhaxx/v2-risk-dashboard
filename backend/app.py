@@ -9,6 +9,7 @@ from backend.api import liquidation
 from backend.api import metadata
 from backend.api import price_shock
 from backend.api import snapshot
+from backend.api import ucache
 from backend.middleware.cache_middleware import CacheMiddleware
 from backend.middleware.readiness import ReadinessMiddleware
 from backend.state import BackendState
@@ -23,73 +24,6 @@ load_dotenv()
 state = BackendState()
 
 
-@repeat_every(seconds=60 * 60, wait_first=True)
-async def repeatedly_retake_snapshot(state: BackendState) -> None:
-    await state.take_pickle_snapshot()
-
-
-def clean_cache(state: BackendState) -> None:
-    if not os.path.exists("pickles"):
-        print("pickles folder does not exist")
-        return
-
-    pickles = glob.glob("pickles/*")
-
-    # check for pickle folders with less than 4 files (error in write)
-    incomplete_pickles = []
-    for pickle in pickles:
-        if len(glob.glob(f"{pickle}/*")) < 4:
-            incomplete_pickles.append(pickle)
-
-    for incomplete_pickle in incomplete_pickles:
-        print(f"deleting {incomplete_pickle}")
-        try:
-            shutil.rmtree(incomplete_pickle)
-        except Exception as e:
-            print(f"Error deleting {incomplete_pickle}: {e}")
-
-    pickles = glob.glob("pickles/*")
-
-    if len(pickles) > 5:
-        print("pickles folder has more than 5 pickles, deleting old ones")
-        pickles.sort(key=os.path.getmtime)
-        for pickle in pickles[:-5]:
-            print(f"deleting {pickle}")
-            try:
-                shutil.rmtree(pickle)
-            except Exception as e:
-                print(f"Error deleting {pickle}: {e}")
-
-    # Clean regular cache
-    cache_files = glob.glob("cache/*")
-    if len(cache_files) > 35:
-        print("cache folder has more than 35 files, deleting old ones")
-        cache_files.sort(key=os.path.getmtime)
-        for cache_file in cache_files[:-35]:
-            print(f"deleting {cache_file}")
-            try:
-                os.remove(cache_file)
-            except Exception as e:
-                print(f"Error deleting {cache_file}: {e}")
-
-    # Clean ucache
-    ucache_files = glob.glob("ucache/*")
-    if len(ucache_files) > 35:
-        print("ucache folder has more than 35 files, deleting old ones")
-        ucache_files.sort(key=os.path.getmtime)
-        for ucache_file in ucache_files[:-35]:
-            print(f"deleting {ucache_file}")
-            try:
-                os.remove(ucache_file)
-            except Exception as e:
-                print(f"Error deleting {ucache_file}: {e}")
-
-
-@repeat_every(seconds=60 * 8, wait_first=True)
-async def repeatedly_clean_cache(state: BackendState) -> None:
-    clean_cache(state)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     url = os.getenv("RPC_URL")
@@ -99,28 +33,15 @@ async def lifespan(app: FastAPI):
     state.initialize(url)
 
     print("Checking if cached vat exists")
-    clean_cache(state)
     cached_vat_path = sorted(glob.glob("pickles/*"))
     if len(cached_vat_path) > 0:
         print("Loading cached vat")
         await state.load_pickle_snapshot(cached_vat_path[-1])
-        # await repeatedly_clean_cache(state)
-        await repeatedly_retake_snapshot(state)
     else:
         print("No cached vat found, bootstrapping")
         await state.bootstrap()
         await state.take_pickle_snapshot()
-        # await repeatedly_clean_cache(state)
-        await repeatedly_retake_snapshot(state)
     state.ready = True
-    # print("Checking price shock")
-    # await price_shock._get_price_shock(
-    #     state.current_pickle_path, state.vat, state.dc, 0.05, "ignore stables", 5
-    # )
-    # print("Checking asset liability matrix")
-    # await asset_liability._get_asset_liability_matrix(
-    #     state.current_pickle_path, state.vat, 0, 0
-    # )
     import random
     import time
 
@@ -146,6 +67,7 @@ app.include_router(
     asset_liability.router, prefix="/api/asset-liability", tags=["asset-liability"]
 )
 app.include_router(snapshot.router, prefix="/api/snapshot", tags=["snapshot"])
+app.include_router(ucache.router, prefix="/api/ucache", tags=["ucache"])
 
 
 # NOTE: All other routes should be in /api/* within the /api folder. Routes outside of /api are not exposed in k8s

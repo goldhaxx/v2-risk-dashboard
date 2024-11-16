@@ -1,7 +1,10 @@
 import asyncio
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
 import glob
+from itertools import islice
 import json
+import multiprocessing
 import os
 from typing import Optional
 
@@ -13,19 +16,27 @@ from dotenv import load_dotenv
 from fastapi.responses import JSONResponse
 
 
+def chunk_list(lst, n):
+    """Split list into n chunks"""
+    size = len(lst)
+    chunk_size = (size + n - 1) // n
+    it = iter(lst)
+    return [list(islice(it, chunk_size)) for _ in range(n)]
+
+
 @dataclass
 class Endpoint:
     endpoint: str
     params: dict
 
 
-async def generate_ucache(state: BackendState, endpoints: list[Endpoint]):
-    """
-    Generate ucache files for specified endpoints
-    """
-    ucache_dir = "ucache"
-    if not os.path.exists(ucache_dir):
-        os.makedirs(ucache_dir)
+def process_multiple_endpoints(state_pickle_path: str, endpoints: list[Endpoint]):
+    """Process a single endpoint in its own process"""
+    state = BackendState()
+    state.initialize(os.getenv("RPC_URL"))
+    asyncio.run(state.load_pickle_snapshot(state_pickle_path))
+
+    results = []
 
     for endpoint_object in endpoints:
         endpoint = endpoint_object.endpoint
@@ -51,6 +62,7 @@ async def generate_ucache(state: BackendState, endpoints: list[Endpoint]):
 
             if endpoint == "asset-liability/matrix":
                 content = await _get_asset_liability_matrix(
+                    state.last_oracle_slot,
                     state.vat,
                     mode=query_params["mode"],
                     perp_market_index=query_params["perp_market_index"],
@@ -66,19 +78,44 @@ async def generate_ucache(state: BackendState, endpoints: list[Endpoint]):
             safe_query = request.url.query.replace("&", "_").replace("=", "-")
             ucache_key = f"{ucache_key}__{safe_query}"
         ucache_key = ucache_key.replace("/", "_")
-        ucache_file = os.path.join(ucache_dir, f"{ucache_key}.json")
+        ucache_file = os.path.join("ucache", f"{ucache_key}.json")
 
-        response = await mock_call_next(request)
-        if response.status_code == 200:
-            response_data = {
-                "content": json.loads(response.body.decode()),
-                "status_code": response.status_code,
-                "headers": {"content-type": "application/json"},
-            }
+        async def run_request():
+            response = await mock_call_next(request)
+            if response.status_code == 200:
+                response_data = {
+                    "content": json.loads(response.body.decode()),
+                    "status_code": response.status_code,
+                    "headers": {"content-type": "application/json"},
+                }
 
-            with open(ucache_file, "w") as f:
-                json.dump(response_data, f)
-            print(f"Generated cache for {endpoint}")
+                with open(ucache_file, "w") as f:
+                    json.dump(response_data, f)
+                return f"Generated cache for {endpoint}"
+
+        asyncio.run(run_request())
+
+    return results
+
+
+async def generate_ucache(state: BackendState, endpoints: list[Endpoint]):
+    """Generate ucache files by splitting endpoints across processes"""
+    ucache_dir = "ucache"
+    if not os.path.exists(ucache_dir):
+        os.makedirs(ucache_dir)
+
+    state_pickle_path = sorted(glob.glob("pickles/*"))[-1]
+    # n_processes = max(1, multiprocessing.cpu_count() - 1)
+    n_processes = 1
+    with ProcessPoolExecutor(max_workers=n_processes) as executor:
+        futures = [
+            executor.submit(process_multiple_endpoints, state_pickle_path, list(chunk))
+            for chunk in chunk_list(endpoints, n_processes)
+        ]
+
+        for future in futures:
+            for result in future.result():
+                print(result)
 
 
 async def main():
@@ -87,13 +124,13 @@ async def main():
     state.initialize(os.getenv("RPC_URL"))
     use_snapshot = True
 
-    if use_snapshot:
-        cached_vat_path = sorted(glob.glob("pickles/*"))
-        print(f"Loading cached vat from {cached_vat_path[-1]}")
-        await state.load_pickle_snapshot(cached_vat_path[-1])
-    else:
-        await state.bootstrap()
-        await state.take_pickle_snapshot()
+    # if use_snapshot:
+    #     cached_vat_path = sorted(glob.glob("pickles/*"))
+    #     print(f"Loading cached vat from {cached_vat_path[-1]}")
+    #     await state.load_pickle_snapshot(cached_vat_path[-1])
+    # else:
+    #     await state.bootstrap()
+    #     await state.take_pickle_snapshot()
 
     endpoints = [
         # Endpoint(
@@ -108,14 +145,22 @@ async def main():
             endpoint="asset-liability/matrix",
             params={"mode": 0, "perp_market_index": 0},
         ),
-        Endpoint(
-            endpoint="asset-liability/matrix",
-            params={"mode": 1, "perp_market_index": 0},
-        ),
-        Endpoint(
-            endpoint="asset-liability/matrix",
-            params={"mode": 2, "perp_market_index": 30},
-        ),
+        # Endpoint(
+        #     endpoint="asset-liability/matrix",
+        #     params={"mode": 0, "perp_market_index": 2},
+        # ),
+        # Endpoint(
+        #     endpoint="asset-liability/matrix",
+        #     params={"mode": 0, "perp_market_index": 3},
+        # ),
+        # Endpoint(
+        #     endpoint="asset-liability/matrix",
+        #     params={"mode": 0, "perp_market_index": 4},
+        # ),
+        # Endpoint(
+        #     endpoint="asset-liability/matrix",
+        #     params={"mode": 2, "perp_market_index": 30},
+        # ),
     ]
 
     await generate_ucache(state, endpoints)

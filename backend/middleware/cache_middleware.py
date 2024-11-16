@@ -26,6 +26,8 @@ class CacheMiddleware(BaseHTTPMiddleware):
             os.makedirs(self.ucache_dir)
 
     async def dispatch(self, request: BackendRequest, call_next: Callable):
+        if request.url.path.startswith("/api/ucache"):
+            return await call_next(request)
         if not request.url.path.startswith("/api"):
             return await call_next(request)
 
