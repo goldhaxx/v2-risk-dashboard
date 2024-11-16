@@ -36,6 +36,10 @@ def asset_liab_matrix_page():
     )
     st.query_params.update({"perp_market_index": perp_market_index})
 
+    min_leverage = st.slider(
+        "Filter by minimum leverage", 0.0, 50.0, 0.0, 0.5, key="min_leverage"
+    )
+
     try:
         result = api(
             "asset-liability",
@@ -74,7 +78,6 @@ def asset_liab_matrix_page():
 
     # Add leverage filter to FULL tab
     with tabs[0]:
-        min_leverage = st.slider("Filter by minimum leverage", 0.0, 50.0, 0.0, 0.5)
         filtered_df = df[df["leverage"] >= min_leverage].sort_values(
             "leverage", ascending=False
         )
