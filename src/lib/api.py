@@ -57,7 +57,7 @@ def api2(url: str, _params: Optional[dict] = None, key: str = "") -> dict:
     Example with params: /api/price-shock/usermap?asset_group=ignore+stables&oracle_distortion=0.05
         -> GET_api_price-shock_usermap__asset_group-ignore+stables_oracle_distortion-0.05.json
     """
-    print("===> SERVING FROM R2")
+    print("===> SERVING FROM LOCAL CACHE")
 
     try:
         cache_key = f"GET/api/{url}".replace("/", "_")
@@ -73,7 +73,11 @@ def api2(url: str, _params: Optional[dict] = None, key: str = "") -> dict:
             query_str = "_".join(query_parts)
             cache_key = f"{cache_key}__{query_str}"
 
+        use_local = False
         r2_url = f"{R2_PREFIX}/{cache_key}.json"
+        if use_local:
+            r2_url = f"{BASE_URL}/api/ucache/{cache_key}.json"
+
         print(f"Fetching from R2: {r2_url}")
         response = requests.get(r2_url)
         if response.status_code != 200:
