@@ -8,6 +8,8 @@ import requests
 from requests.exceptions import JSONDecodeError
 import streamlit as st
 
+from utils import get_current_slot
+
 
 options = [0, 1, 2, 3]
 labels = [
@@ -101,20 +103,7 @@ def asset_liab_matrix_cached_page():
 
     summary_df = generate_summary_data(filtered_df, mode, perp_market_index)
     slot = result["slot"]
-
-    payload = {
-        "id": 1,
-        "jsonrpc": "2.0",
-        "method": "getSlot",
-    }
-    headers = {
-        "accept": "application/json",
-        "content-type": "application/json",
-    }
-    response = requests.post(
-        "https://api.mainnet-beta.solana.com", json=payload, headers=headers
-    )
-    current_slot = response.json()["result"]
+    current_slot = get_current_slot()
 
     st.info(
         f"This data is for slot {slot}, which is now {int(current_slot) - int(slot)} slots old"
@@ -161,4 +150,3 @@ def asset_liab_matrix_cached_page():
             f"{len(toshow)} users with this asset to cover liabilities (with {st.session_state.min_leverage}x leverage or more)"
         )
         tab.dataframe(toshow, hide_index=True)
-

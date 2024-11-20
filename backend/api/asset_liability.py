@@ -18,14 +18,12 @@ async def _get_asset_liability_matrix(
     perp_market_index: int,
 ) -> dict:
     print("==> Getting asset liability matrix...")
-    res, df = await get_matrix(vat, mode, perp_market_index)
-    res_dict = res.to_dict()
+    df = await get_matrix(vat, mode, perp_market_index)
     df_dict = df.to_dict()
     print("==> Asset liability matrix fetched")
 
     return {
         "slot": slot,
-        "res": res_dict,
         "df": df_dict,
     }
 

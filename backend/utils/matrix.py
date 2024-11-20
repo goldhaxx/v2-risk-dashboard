@@ -74,7 +74,7 @@ async def get_matrix(vat: Vat, mode: int = 0, perp_market_index: int = 0):
                 metrics[f"{base_name}_perp_{perp_market_index}_long"] = (
                     value / spot_asset * net_perp
                 )
-            elif net_perp < 0:
+            if net_perp < 0:
                 print("Net perp below 0")
                 metrics[f"{base_name}_perp_{perp_market_index}_short"] = (
                     value / spot_asset * net_perp
@@ -84,6 +84,4 @@ async def get_matrix(vat: Vat, mode: int = 0, perp_market_index: int = 0):
                 new_columns[col][idx] = val
 
     df = pd.concat([df, pd.DataFrame(new_columns)], axis=1)
-    summary_data = {}
-    summary_df = pd.DataFrame(summary_data).T
-    return summary_df, df
+    return df

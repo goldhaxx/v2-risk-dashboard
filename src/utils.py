@@ -19,6 +19,7 @@ from driftpy.user_map.user_map_config import (
 from driftpy.user_map.user_map_config import UserMapConfig
 from driftpy.user_map.user_map_config import UserStatsMapConfig
 from driftpy.user_map.userstats_map import UserStatsMap
+import requests
 
 
 def to_financial(num):
@@ -103,3 +104,19 @@ def fetch_result_with_retry(func, *args, **kwargs):
         time.sleep(0.5)
     print(f"Fetching result with retry for {func.__name__}{args} did not succeed")
     return None
+
+
+def get_current_slot():
+    payload = {
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "getSlot",
+    }
+    headers = {
+        "accept": "application/json",
+        "content-type": "application/json",
+    }
+    response = requests.post(
+        "https://api.mainnet-beta.solana.com", json=payload, headers=headers
+    )
+    return response.json()["result"]

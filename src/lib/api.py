@@ -57,34 +57,28 @@ def api2(url: str, _params: Optional[dict] = None, key: str = "") -> dict:
     Example with params: /api/price-shock/usermap?asset_group=ignore+stables&oracle_distortion=0.05
         -> GET_api_price-shock_usermap__asset_group-ignore+stables_oracle_distortion-0.05.json
     """
-    print("===> SERVING FROM LOCAL CACHE")
+    print("===> SERVING CACHE")
 
-    try:
-        cache_key = f"GET/api/{url}".replace("/", "_")
+    cache_key = f"GET/api/{url}".replace("/", "_")
 
-        # Handle query parameters exactly as they appear in the URL
-        if _params:
-            print(f"Params: {_params}")
-            query_parts = []
-            for k, v in _params.items():
-                if isinstance(v, str):
-                    v = v.replace(" ", "%2B")
-                query_parts.append(f"{k}-{v}")
-            query_str = "_".join(query_parts)
-            cache_key = f"{cache_key}__{query_str}"
+    if _params:
+        print(f"Params: {_params}")
+        query_parts = []
+        for k, v in _params.items():
+            if isinstance(v, str):
+                v = v.replace(" ", "%2B")
+            query_parts.append(f"{k}-{v}")
+        query_str = "_".join(query_parts)
+        cache_key = f"{cache_key}__{query_str}"
 
-        use_local = False
-        r2_url = f"{R2_PREFIX}/{cache_key}.json"
-        if use_local:
-            r2_url = f"{BASE_URL}/api/ucache/{cache_key}.json"
+    use_local = os.environ.get("USE_LOCAL_CACHE", "false").lower() == "true"
+    r2_url = f"{R2_PREFIX}/{cache_key}.json"
+    if use_local:
+        r2_url = f"{BASE_URL}/api/ucache/{cache_key}.json"
 
-        print(f"Fetching from R2: {r2_url}")
-        response = requests.get(r2_url)
-        if response.status_code != 200:
-            raise Exception(f"Failed to fetch from R2: {response.status_code}")
+    response = requests.get(r2_url)
+    if response.status_code != 200:
+        raise Exception(f"Failed to fetch from R2: {response.status_code}")
 
-        response_data = response.json()
-        return response_data["content"]
-    except Exception as e:
-        print(f"Error fetching from R2: {str(e)}")
-        raise
+    response_data = response.json()
+    return response_data["content"]
