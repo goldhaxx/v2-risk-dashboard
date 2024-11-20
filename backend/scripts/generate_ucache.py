@@ -122,15 +122,14 @@ async def main():
     load_dotenv()
     state = BackendState()
     state.initialize(os.getenv("RPC_URL"))
-    use_snapshot = True
 
-    # if use_snapshot:
-    #     cached_vat_path = sorted(glob.glob("pickles/*"))
-    #     print(f"Loading cached vat from {cached_vat_path[-1]}")
-    #     await state.load_pickle_snapshot(cached_vat_path[-1])
-    # else:
-    #     await state.bootstrap()
-    #     await state.take_pickle_snapshot()
+    use_snapshot = os.getenv("USE_SNAPSHOT", "false").lower() == "true"
+    print(f"use_snapshot: {use_snapshot}")
+
+    if not use_snapshot:
+        print("Taking snapshot")
+        await state.bootstrap()
+        await state.take_pickle_snapshot()
 
     endpoints = [
         # Endpoint(
