@@ -121,6 +121,10 @@ class BackendState:
         self.last_oracle_slot = pickle_map["perporacles"].split("_")[-1].split(".")[0]
         return pickle_map
 
+    async def close(self):
+        await self.dc.unsubscribe()
+        await self.connection.close()
+
 
 class BackendRequest(Request):
     @property
