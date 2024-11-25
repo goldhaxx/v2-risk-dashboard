@@ -53,6 +53,7 @@ async def process_multiple_endpoints(state_pickle_path: str, endpoints: list[End
         async def mock_call_next(request):
             if endpoint == "price-shock/usermap":
                 content = await _get_price_shock(
+                    state.last_oracle_slot,
                     state.vat,
                     state.dc,
                     oracle_distortion=query_params["oracle_distortion"],
@@ -126,10 +127,10 @@ async def main():
         await state.close()
 
     endpoints = [
-        Endpoint(
-            endpoint="asset-liability/matrix",
-            params={"mode": 0, "perp_market_index": 0},
-        ),
+        # Endpoint(
+        #     endpoint="asset-liability/matrix",
+        #     params={"mode": 0, "perp_market_index": 0},
+        # ),
         Endpoint(
             endpoint="price-shock/usermap",
             params={

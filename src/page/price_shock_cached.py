@@ -14,6 +14,8 @@ import plotly.graph_objects as go
 from solana.rpc.async_api import AsyncClient
 import streamlit as st
 
+from utils import get_current_slot
+
 
 class UserLeveragesResponse(TypedDict):
     leverages_none: list[Any]
@@ -154,6 +156,10 @@ def price_shock_cached_page():
         st.write("Check again in one minute!")
         st.stop()
 
+    current_slot = get_current_slot()
+    st.info(
+        f"This data is for slot {result['slot']}, which is now {int(current_slot) - int(result['slot'])} slots old"
+    )
     fig = price_shock_plot(result, oracle_distort)
     st.plotly_chart(fig)
     oracle_down_max = pd.DataFrame(result["leverages_down"][-1])
