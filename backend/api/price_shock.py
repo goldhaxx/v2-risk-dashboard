@@ -11,6 +11,7 @@ router = APIRouter()
 
 
 async def _get_price_shock(
+    slot: int,
     vat: Vat,
     drift_client: DriftClient,
     oracle_distortion: float = 0.1,
@@ -18,6 +19,7 @@ async def _get_price_shock(
     n_scenarios: int = 5,
 ) -> dict:
     return get_user_leverages_for_price_shock(
+        slot,
         drift_client,
         vat.users,
         oracle_distortion,
@@ -34,6 +36,7 @@ async def get_price_shock(
     n_scenarios: int = 5,
 ):
     return await _get_price_shock(
+        request.state.backend_state.last_oracle_slot,
         request.state.backend_state.vat,
         request.state.backend_state.dc,
         oracle_distortion,

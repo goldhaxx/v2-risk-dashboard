@@ -24,23 +24,9 @@ def header():
 
 def sidebar():
     st.sidebar.header("Data Information")
-    try:
-        metadata = fetch_result_with_retry(api, "metadata", "", as_json=True)
-        pickle_file = metadata["pickle_file"]
-        if pickle_file[-1] == "/":
-            pickle_file = pickle_file[:-1]
-        timestamp = pickle_file.split("-")[1:]
-        timestamp = datetime.strptime(" ".join(timestamp[-6:]), "%Y %m %d %H %M %S")
-        time_ago = datetime.now() - timestamp
-        time_ago_str = humanize.precisedelta(
-            time_ago,
-            minimum_unit="seconds",
-        )
-        st.sidebar.write(f"Last snapshot: {timestamp}")
-        st.sidebar.write(f"Time since last snapshot: {time_ago_str}")
-    except Exception as e:
-        print(e)
-        st.sidebar.error("Unable to reach backend")
+    st.sidebar.write(
+        "Slot information available for price shock and asset liability matrix pages. Data is live otherwise."
+    )
 
 
 def needs_backend(page_callable: callable):

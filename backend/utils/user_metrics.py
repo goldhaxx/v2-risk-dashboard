@@ -230,6 +230,7 @@ def get_user_leverages_for_asset_liability(user_map: UserMap):
 
 
 def get_user_leverages_for_price_shock(
+    slot: int,
     drift_client: DriftClient,
     user_map: UserMap,
     oracle_distortion: float = 0.1,
@@ -294,6 +295,7 @@ def get_user_leverages_for_price_shock(
         leverages_down.append(leverages_down_i)
 
     return {
+        "slot": slot,
         "leverages_none": leverages_none,
         "leverages_up": tuple(leverages_up),
         "leverages_down": tuple(leverages_down),

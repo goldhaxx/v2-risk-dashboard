@@ -76,6 +76,7 @@ def api2(url: str, _params: Optional[dict] = None, key: str = "") -> dict:
     if use_local:
         r2_url = f"{BASE_URL}/api/ucache/{cache_key}.json"
 
+    print(f"Fetching from: {r2_url}")
     response = requests.get(r2_url)
     if response.status_code != 200:
         raise Exception(f"Failed to fetch from R2: {response.status_code}")

@@ -130,6 +130,14 @@ async def main():
             endpoint="asset-liability/matrix",
             params={"mode": 0, "perp_market_index": 0},
         ),
+        Endpoint(
+            endpoint="price-shock/usermap",
+            params={
+                "asset_group": "ignore+stables",
+                "oracle_distortion": 0.05,
+                "n_scenarios": 5,
+            },
+        ),
     ]
 
     await generate_ucache(endpoints)
