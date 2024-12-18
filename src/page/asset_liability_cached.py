@@ -1,15 +1,10 @@
-import json
-
+import pandas as pd
+import streamlit as st
 from driftpy.constants.perp_markets import mainnet_perp_market_configs
 from driftpy.constants.spot_markets import mainnet_spot_market_configs
+
 from lib.api import api2
-import pandas as pd
-import requests
-from requests.exceptions import JSONDecodeError
-import streamlit as st
-
 from utils import get_current_slot
-
 
 options = [0, 1, 2, 3]
 labels = [
@@ -75,7 +70,7 @@ def asset_liab_matrix_cached_page():
     mode = st.selectbox(
         "Options", options, format_func=lambda x: labels[x], index=options.index(mode)
     )
-    st.query_params.update({"mode": mode})
+    st.query_params.update({"mode": str(mode)})
 
     perp_market_index = st.selectbox(
         "Market index",
@@ -85,11 +80,11 @@ def asset_liab_matrix_cached_page():
         ),
         format_func=lambda x: f"{x} ({mainnet_perp_market_configs[int(x)].symbol})",
     )
-    st.query_params.update({"perp_market_index": perp_market_index})
+    st.query_params.update({"perp_market_index": str(perp_market_index)})
 
     result = api2(
         "asset-liability/matrix",
-        _params=params,
+        _params={"mode": mode, "perp_market_index": perp_market_index},
         key=f"asset-liability/matrix_{mode}_{perp_market_index}",
     )
     df = pd.DataFrame(result["df"])

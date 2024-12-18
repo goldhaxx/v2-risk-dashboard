@@ -1,26 +1,34 @@
 import os
 
+import streamlit as st
 from dotenv import load_dotenv
-from lib.page import header
-from lib.page import needs_backend
-from lib.page import sidebar
-from page.asset_liability import asset_liab_matrix_page
+
+from lib.page import header, needs_backend, sidebar
 from page.asset_liability_cached import asset_liab_matrix_cached_page
 from page.backend import backend_page
 from page.health import health_page
 from page.health_cached import health_cached_page
 from page.liquidation_curves import liquidation_curves_page
 from page.orderbook import orderbook_page
-from page.price_shock import price_shock_page
 from page.price_shock_cached import price_shock_cached_page
 from sections.welcome import welcome_page
-import streamlit as st
-
 
 load_dotenv()
 
 if __name__ == "__main__":
-    st.set_page_config(layout="wide")
+    path = os.path.join(os.path.dirname(__file__), "style.css")
+    with open(path) as css:
+        custom_css = css.read()
+
+    def apply_custom_css(css):
+        st.markdown(f"<style>{css}</style>", unsafe_allow_html=True)
+
+    st.set_page_config(
+        layout="wide",
+        initial_sidebar_state="expanded",
+        menu_items={"About": None, "Get help": None, "Report a bug": None},
+    )
+    apply_custom_css(custom_css)
     header()
     sidebar()
 
@@ -29,7 +37,7 @@ if __name__ == "__main__":
             welcome_page,
             url_path="welcome",
             title="Welcome",
-            icon=":material/home:",
+            icon="🏠",
         ),
         st.Page(
             orderbook_page,
@@ -43,16 +51,28 @@ if __name__ == "__main__":
             title="Health",
             icon="🏥",
         ),
+        # st.Page(
+        #     needs_backend(price_shock_page),
+        #     url_path="price-shock",
+        #     title="Price Shock",
+        #     icon="💸",
+        # ),
+        # st.Page(
+        #     needs_backend(asset_liab_matrix_page),
+        #     url_path="asset-liability-matrix",
+        #     title="Asset-Liability Matrix",
+        #     icon="📊",
+        # ),
         st.Page(
-            needs_backend(price_shock_page),
-            url_path="price-shock",
+            price_shock_cached_page,
+            url_path="price-shock-cached",
             title="Price Shock",
             icon="💸",
         ),
         st.Page(
-            needs_backend(asset_liab_matrix_page),
-            url_path="asset-liab-matrix",
-            title="Asset-Liab Matrix",
+            asset_liab_matrix_cached_page,
+            url_path="asset-liability-matrix-cached",
+            title="Asset-Liability Matrix",
             icon="📊",
         ),
         st.Page(
@@ -69,18 +89,6 @@ if __name__ == "__main__":
             title="Health (Cached)",
             icon="🏥",
         ),
-        st.Page(
-            price_shock_cached_page,
-            url_path="price-shock-cached",
-            title="Price Shock (Cached)",
-            icon="💸",
-        ),
-        st.Page(
-            asset_liab_matrix_cached_page,
-            url_path="asset-liab-matrix-cached",
-            title="Asset-Liab Matrix (Cached)",
-            icon="📊",
-        ),
     ]
     if os.getenv("DEV"):
         main_pages.append(
@@ -95,7 +103,7 @@ if __name__ == "__main__":
     pg = st.navigation(
         {
             "Main": main_pages,
-            "Cached": cached_pages,
+            # "Cached": cached_pages,
         }
     )
     pg.run()

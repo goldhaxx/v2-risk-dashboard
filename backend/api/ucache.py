@@ -1,10 +1,7 @@
-import functools
-
-from backend.state import BackendRequest
-from backend.state import BackendState
 from fastapi import APIRouter
 from fastapi.responses import FileResponse
 
+from backend.state import BackendRequest
 
 router = APIRouter()
 

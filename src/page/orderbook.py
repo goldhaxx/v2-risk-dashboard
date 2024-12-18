@@ -1,8 +1,6 @@
 import requests
 import streamlit as st
 
-from lib.page import RPC_STATE_KEY
-
 
 def fetch_orderbook_data(coin, size):
     post_url = "https://api.hyperliquid.xyz/info"
@@ -121,8 +119,6 @@ def fetch_orderbook_data(coin, size):
 
 
 def orderbook_page():
-    if st.button("Refresh"):
-        st.cache_data.clear()
     s1, s2 = st.columns(2)
 
     coin = s1.selectbox("coin:", ["SOL", "BTC", "ETH"])
@@ -139,3 +135,5 @@ def orderbook_page():
     o2.header("drift")
     o2.write(dr_oracle)
     o2.write(dr)
+    if st.button("Refresh"):
+        st.cache_data.clear()

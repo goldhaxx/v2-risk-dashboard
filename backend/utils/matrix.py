@@ -1,8 +1,8 @@
-from backend.utils.user_metrics import get_user_leverages_for_asset_liability
-from driftpy.constants.spot_markets import mainnet_spot_market_configs
-from driftpy.drift_client import DriftClient
-from driftpy.pickle.vat import Vat
 import pandas as pd
+from driftpy.constants.spot_markets import mainnet_spot_market_configs
+from driftpy.pickle.vat import Vat
+
+from backend.utils.user_metrics import get_user_leverages_for_asset_liability
 
 
 def calculate_effective_leverage(assets: float, liabilities: float) -> float:

@@ -1,14 +1,12 @@
 import heapq
 
-from backend.state import BackendRequest
-from driftpy.constants import BASE_PRECISION
-from driftpy.constants import PRICE_PRECISION
-from driftpy.constants import SPOT_BALANCE_PRECISION
+import pandas as pd
+from driftpy.constants import BASE_PRECISION, PRICE_PRECISION, SPOT_BALANCE_PRECISION
 from driftpy.pickle.vat import Vat
 from driftpy.types import is_variant
 from fastapi import APIRouter
-import pandas as pd
 
+from backend.state import BackendRequest
 
 router = APIRouter()
 
@@ -42,32 +40,31 @@ def get_account_health_distribution(request: BackendRequest):
     """
     vat: Vat = request.state.backend_state.vat
     health_notional_distributions = {
-        "0-10%": 0,
-        "10-20%": 0,
-        "20-30%": 0,
-        "30-40%": 0,
-        "40-50%": 0,
-        "50-60%": 0,
-        "60-70%": 0,
-        "70-80%": 0,
-        "80-90%": 0,
-        "90-100%": 0,
+        "0-10%": 0.0,
+        "10-20%": 0.0,
+        "20-30%": 0.0,
+        "30-40%": 0.0,
+        "40-50%": 0.0,
+        "50-60%": 0.0,
+        "60-70%": 0.0,
+        "70-80%": 0.0,
+        "80-90%": 0.0,
+        "90-100%": 0.0,
     }
     health_counts = {
-        "0-10%": 0,
-        "10-20%": 0,
-        "20-30%": 0,
-        "30-40%": 0,
-        "40-50%": 0,
-        "50-60%": 0,
-        "60-70%": 0,
-        "70-80%": 0,
-        "80-90%": 0,
-        "90-100%": 0,
+        "0-10%": 0.0,
+        "10-20%": 0.0,
+        "20-30%": 0.0,
+        "30-40%": 0.0,
+        "40-50%": 0.0,
+        "50-60%": 0.0,
+        "60-70%": 0.0,
+        "70-80%": 0.0,
+        "80-90%": 0.0,
+        "90-100%": 0.0,
     }
 
     for user in vat.users.values():
-        # print(user.user_public_key)
         try:
             total_collateral = user.get_total_collateral() / PRICE_PRECISION
             current_health = user.get_health()

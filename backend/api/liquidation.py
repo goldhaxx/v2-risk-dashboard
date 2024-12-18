@@ -1,9 +1,8 @@
-from backend.state import BackendRequest
-from driftpy.constants import BASE_PRECISION
-from driftpy.constants import PRICE_PRECISION
+from driftpy.constants import BASE_PRECISION, PRICE_PRECISION
 from driftpy.pickle.vat import Vat
 from fastapi import APIRouter
 
+from backend.state import BackendRequest
 
 router = APIRouter()
 
@@ -14,6 +13,9 @@ def get_liquidation_curve(request: BackendRequest, market_index: int):
     liquidations_long: list[tuple[float, float, str]] = []
     liquidations_short: list[tuple[float, float, str]] = []
     market_price = vat.perp_oracles.get(market_index)
+    if market_price is None:
+        print("Market price is None")
+        return {"liquidations_long": [], "liquidations_short": [], "market_price_ui": 0}
     market_price_ui = market_price.price / PRICE_PRECISION
     for pubkey, user in vat.users.user_map.items():
         perp_position = user.get_perp_position(market_index)

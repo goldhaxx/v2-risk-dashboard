@@ -1,24 +1,22 @@
-from contextlib import asynccontextmanager
 import glob
 import os
-import shutil
+from contextlib import asynccontextmanager
 
-from backend.api import asset_liability
-from backend.api import health
-from backend.api import liquidation
-from backend.api import metadata
-from backend.api import price_shock
-from backend.api import snapshot
-from backend.api import ucache
+from dotenv import load_dotenv
+from fastapi import FastAPI
+
+from backend.api import (
+    asset_liability,
+    health,
+    liquidation,
+    metadata,
+    price_shock,
+    snapshot,
+    ucache,
+)
 from backend.middleware.cache_middleware import CacheMiddleware
 from backend.middleware.readiness import ReadinessMiddleware
 from backend.state import BackendState
-from backend.utils.repeat_every import repeat_every
-from dotenv import load_dotenv
-from fastapi import BackgroundTasks
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-
 
 load_dotenv()
 state = BackendState()

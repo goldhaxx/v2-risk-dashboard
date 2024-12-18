@@ -1,7 +1,7 @@
 """
 Periodic Task Execution Decorator
 
-Provides a `repeat_every` decorator for periodic execution of tasks in asynchronous environments. 
+Provides a `repeat_every` decorator for periodic execution of tasks in asynchronous environments.
 Modified from fastapi_utils library to support passing a state object to the repeated function.
 
 Features:

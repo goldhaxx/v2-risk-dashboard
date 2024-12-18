@@ -1,19 +1,18 @@
 import asyncio
-from concurrent.futures import ProcessPoolExecutor
-from dataclasses import dataclass
 import glob
-from itertools import islice
 import json
-import multiprocessing
 import os
-from typing import Optional
+from dataclasses import dataclass
+from itertools import islice
+
+from dotenv import load_dotenv
+from fastapi.responses import JSONResponse
 
 from backend.api.asset_liability import _get_asset_liability_matrix
 from backend.api.price_shock import _get_price_shock
 from backend.state import BackendState
-from backend.utils.waiting_for import waiting_for
-from dotenv import load_dotenv
-from fastapi.responses import JSONResponse
+
+load_dotenv()
 
 
 def chunk_list(lst, n):
@@ -33,7 +32,7 @@ class Endpoint:
 async def process_multiple_endpoints(state_pickle_path: str, endpoints: list[Endpoint]):
     """Process a single endpoint in its own process"""
     state = BackendState()
-    state.initialize(os.getenv("RPC_URL"))
+    state.initialize(os.getenv("RPC_URL") or "")
     await state.load_pickle_snapshot(state_pickle_path)
 
     results = []
@@ -120,17 +119,17 @@ async def main():
 
     if not use_snapshot:
         state = BackendState()
-        state.initialize(os.getenv("RPC_URL"))
+        state.initialize(os.getenv("RPC_URL") or "")
         print("Taking snapshot")
         await state.bootstrap()
         await state.take_pickle_snapshot()
         await state.close()
 
     endpoints = [
-        # Endpoint(
-        #     endpoint="asset-liability/matrix",
-        #     params={"mode": 0, "perp_market_index": 0},
-        # ),
+        Endpoint(
+            endpoint="asset-liability/matrix",
+            params={"mode": 0, "perp_market_index": 0},
+        ),
         Endpoint(
             endpoint="price-shock/usermap",
             params={

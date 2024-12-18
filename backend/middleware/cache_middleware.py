@@ -3,14 +3,13 @@ import glob
 import hashlib
 import json
 import os
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List
 
-from backend.state import BackendRequest
-from backend.state import BackendState
-from fastapi import BackgroundTasks
-from fastapi import Response
+from fastapi import BackgroundTasks, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
+
+from backend.state import BackendRequest, BackendState
 
 
 class CacheMiddleware(BaseHTTPMiddleware):

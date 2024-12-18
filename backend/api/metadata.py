@@ -1,7 +1,6 @@
-from backend.state import BackendRequest
-from backend.state import BackendState
 from fastapi import APIRouter
 
+from backend.state import BackendRequest, BackendState
 
 router = APIRouter()
 

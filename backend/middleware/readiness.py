@@ -1,8 +1,8 @@
-from backend.state import BackendRequest
-from backend.state import BackendState
 from fastapi import HTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
+
+from backend.state import BackendRequest, BackendState
 
 
 class ReadinessMiddleware(BaseHTTPMiddleware):

@@ -18,7 +18,7 @@ def load_newest_files(directory: Optional[str] = None) -> dict[str, str]:
             prefix = filename[: start - 1]
             end = filename.index(".")
             slot = int(filename[start:end])
-            if not prefix in newest_files or slot > newest_files[prefix][1]:
+            if prefix not in newest_files or slot > newest_files[prefix][1]:
                 newest_files[prefix] = (directory + "/" + filename, slot)
 
     # mapping e.g { 'spotoracles' : 'spotoracles_272636137.pkl' }

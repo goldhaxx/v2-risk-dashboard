@@ -1,16 +1,15 @@
-from contextlib import contextmanager
 import sys
 import threading
 import time
-from typing import Optional
+from contextlib import contextmanager
 
 
 class LiveCounter:
-    def __init__(self, action: str, file: Optional[object] = sys.stdout):
+    def __init__(self, action: str, file=sys.stdout):
         self.action = action
         self.file = file
         self.is_running = False
-        self.start_time = None
+        self.start_time = time.time()
 
     def run(self):
         self.start_time = time.time()
@@ -41,7 +40,7 @@ class LiveCounter:
 
 
 @contextmanager
-def waiting_for(action: str, file: Optional[object] = sys.stdout):
+def waiting_for(action: str, file=sys.stdout):
     counter = LiveCounter(action, file)
     try:
         counter.start()

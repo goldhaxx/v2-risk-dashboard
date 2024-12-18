@@ -2,15 +2,12 @@
 Common page functionality
 """
 
-from datetime import datetime
 import os
+from typing import Callable
 
-import humanize
-from lib.api import api
 import streamlit as st
 
-from utils import fetch_result_with_retry
-
+from lib.api import api
 
 RPC_STATE_KEY = "rpc_url"
 NETWORK_STATE_KEY = "network"
@@ -18,7 +15,7 @@ VAT_STATE_KEY = "vat"
 
 
 def header():
-    image_path = os.path.abspath("./images/drift.svg")
+    image_path = os.path.join(os.path.dirname(__file__), "../../images/driftlogo.png")
     st.logo(image=image_path)
 
 
@@ -29,7 +26,7 @@ def sidebar():
     )
 
 
-def needs_backend(page_callable: callable):
+def needs_backend(page_callable: Callable):
     """
     Decorator to add a guard to a page function
     """
@@ -37,7 +34,7 @@ def needs_backend(page_callable: callable):
     def page_with_guard():
         try:
             api("metadata", "", as_json=True)
-        except Exception as e:
+        except Exception:
             st.error("Sorry, unable to reach backend")
             return
 

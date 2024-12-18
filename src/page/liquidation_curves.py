@@ -121,7 +121,6 @@ def plot_liquidation_curves(liquidation_data):
 
 
 def liquidation_curves_page():
-
     options = [0, 1]
     labels = ["SOL-PERP", "BTC-PERP"]
     st.write("Liquidation Curves")

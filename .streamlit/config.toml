@@ -6,3 +6,6 @@ base = "dark"
 
 [browser]
 gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"

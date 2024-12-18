@@ -1,11 +1,11 @@
 from typing import Optional
 
-from backend.state import BackendRequest
-from backend.utils.user_metrics import get_user_leverages_for_price_shock
 from driftpy.drift_client import DriftClient
 from driftpy.pickle.vat import Vat
 from fastapi import APIRouter
 
+from backend.state import BackendRequest
+from backend.utils.user_metrics import get_user_leverages_for_price_shock
 
 router = APIRouter()
 

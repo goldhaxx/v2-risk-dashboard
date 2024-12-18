@@ -1,31 +1,28 @@
-from asyncio import create_task
-from asyncio import gather
-from datetime import datetime
 import os
-from typing import TypedDict
+from asyncio import create_task, gather
+from datetime import datetime
 
-from anchorpy import Wallet
-from backend.utils.vat import load_newest_files
-from backend.utils.waiting_for import waiting_for
+from anchorpy.provider import Wallet
 from driftpy.account_subscription_config import AccountSubscriptionConfig
 from driftpy.drift_client import DriftClient
 from driftpy.market_map.market_map import MarketMap
+from driftpy.market_map.market_map_config import MarketMapConfig
 from driftpy.market_map.market_map_config import (
     WebsocketConfig as MarketMapWebsocketConfig,
 )
-from driftpy.market_map.market_map_config import MarketMapConfig
 from driftpy.pickle.vat import Vat
 from driftpy.types import MarketType
 from driftpy.user_map.user_map import UserMap
+from driftpy.user_map.user_map_config import UserMapConfig, UserStatsMapConfig
 from driftpy.user_map.user_map_config import (
     WebsocketConfig as UserMapWebsocketConfig,
 )
-from driftpy.user_map.user_map_config import UserMapConfig
-from driftpy.user_map.user_map_config import UserStatsMapConfig
 from driftpy.user_map.userstats_map import UserStatsMap
 from fastapi import Request
-import pandas as pd
 from solana.rpc.async_api import AsyncClient
+
+from backend.utils.vat import load_newest_files
+from backend.utils.waiting_for import waiting_for
 
 
 class BackendState:
@@ -118,7 +115,9 @@ class BackendState:
                 perp_oracles_filename=pickle_map["perporacles"],
             )
 
-        self.last_oracle_slot = pickle_map["perporacles"].split("_")[-1].split(".")[0]
+        self.last_oracle_slot = int(
+            pickle_map["perporacles"].split("_")[-1].split(".")[0]
+        )
         return pickle_map
 
     async def close(self):

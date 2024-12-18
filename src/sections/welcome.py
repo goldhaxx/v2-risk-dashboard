@@ -1,22 +1,33 @@
 import streamlit as st
+from streamlit.navigation.page import StreamlitPage
 
 
 def welcome_page():
-    st.title("Welcome to Drift v2 Risk Dashboard")
+    st.title("Drift Risk Dashboard")
+    st.markdown("Track key risk metrics across Drift through these dashboard pages")
+    st.page_link(
+        StreamlitPage("page/orderbook.py"),
+        label="📈 **Orderbook** - Compare hyperliquid price to drift orderbook price",
+    )
 
-    st.markdown(
-        """
-    This dashboard provides comprehensive risk analysis tools for Drift v2. 
-    Explore various aspects of the protocol's health and performance using the following pages:
-    
-    - **Orderbook**: Compare hyperliquid price to drift orderbook price
-    - **Health**: View account health distribution and largest positions
-    - **Price Shock**: Analyze the impact of price changes on the protocol
-    - **Asset-Liability Matrix**: Examine the balance of assets and liabilities
-    - **Liquidations**: Explore liquidation curves and potential risks
-    
-    To get started, select a page from the sidebar on the left.
-    """
+    st.page_link(
+        StreamlitPage("page/health.py"),
+        label="🏥 **Health** - View account health distribution and largest positions",
+    )
+
+    st.page_link(
+        StreamlitPage("page/price_shock.py"),
+        label="⚡ **Price Shock** - Analyze the impact of price changes on the protocol",
+    )
+
+    st.page_link(
+        StreamlitPage("page/asset_liability.py"),
+        label="📊 **Asset-Liability Matrix** - Track assets and liabilities across markets and accounts",
+    )
+
+    st.page_link(
+        StreamlitPage("page/liquidation_curves.py"),
+        label="💧 **Liquidations** - Explore liquidation curves and potential risks",
     )
 
     st.markdown("---")

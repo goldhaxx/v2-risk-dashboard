@@ -1,8 +1,6 @@
-from backend.state import BackendRequest
-from backend.state import BackendState
-from fastapi import APIRouter
-from fastapi import BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks
 
+from backend.state import BackendRequest, BackendState
 
 router = APIRouter()
 
