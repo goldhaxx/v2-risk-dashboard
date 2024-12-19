@@ -1,11 +1,10 @@
 from collections import defaultdict
-import time
 
-from lib.api import api
 import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
 
+from lib.api import api
 from utils import fetch_result_with_retry
 
 
@@ -31,18 +30,14 @@ def plot_liquidation_curves(liquidation_data):
         price_to_data = defaultdict(lambda: {"notional": 0.0, "positions": []})
         for price, notional, pubkey in liquidations:
             price_to_data[price]["notional"] += notional
-            price_to_data[price]["positions"].append(
-                (pubkey, notional)
-            )  # Store tuple of (pubkey, size)
+            price_to_data[price]["positions"].append((pubkey, notional))
         return price_to_data
 
     def prepare_data_for_plot(aggregated_data, reverse=False):
-        """Prepare and sort data for plotting, optionally reversing the cumulative sum for descending plots."""
         sorted_prices = sorted(aggregated_data.keys(), reverse=reverse)
         cumulative_notional = np.cumsum(
             [aggregated_data[price]["notional"] for price in sorted_prices]
         )
-        # Accumulate positions (pubkey and size) for each price point
         cumulative_positions = []
         current_positions = []
         for price in sorted_prices:
@@ -50,15 +45,9 @@ def plot_liquidation_curves(liquidation_data):
             cumulative_positions.append(list(current_positions))
         return sorted_prices, cumulative_notional, cumulative_positions
 
-    # Filter outliers based on defined criteria
-    liquidations_long = filter_outliers(
-        liquidations_long, 2, 0.2
-    )  # Example multipliers for long positions
-    liquidations_short = filter_outliers(
-        liquidations_short, 5, 0.5
-    )  # Example multipliers for short positions
+    liquidations_long = filter_outliers(liquidations_long, 2, 0.2)
+    liquidations_short = filter_outliers(liquidations_short, 5, 0.5)
 
-    # Aggregate and prepare data
     aggregated_long = aggregate_liquidations(liquidations_long)
     aggregated_short = aggregate_liquidations(liquidations_short)
 
@@ -72,11 +61,9 @@ def plot_liquidation_curves(liquidation_data):
     if not long_prices or not short_prices:
         return None
 
-    # Create Plotly figures
     long_fig = go.Figure()
     short_fig = go.Figure()
 
-    # Add traces for long and short positions
     long_fig.add_trace(
         go.Scatter(
             x=long_prices,
@@ -100,7 +87,6 @@ def plot_liquidation_curves(liquidation_data):
         )
     )
 
-    # Update layout with axis titles and grid settings
     long_fig.update_layout(
         title="Long Liquidation Curve",
         xaxis_title="Asset Price",
@@ -108,7 +94,6 @@ def plot_liquidation_curves(liquidation_data):
         xaxis=dict(showgrid=True),
         yaxis=dict(showgrid=True),
     )
-
     short_fig.update_layout(
         title="Short Liquidation Curve",
         xaxis_title="Asset Price",
@@ -125,9 +110,8 @@ def liquidation_curves_page():
     labels = ["SOL-PERP", "BTC-PERP"]
     st.write("Liquidation Curves")
 
-    # Get query parameters
     params = st.query_params
-    market_index = int(params.get("market_index", 0))
+    market_index = int(params.get("market_index", "0"))
 
     market_index = st.selectbox(
         "Market",
@@ -136,35 +120,50 @@ def liquidation_curves_page():
         index=options.index(market_index),
     )
 
-    st.query_params.update({"market_index": market_index})
+    st.query_params.update({"market_index": str(market_index)})  # type: ignore
 
+    liquidation_data = None
     try:
         liquidation_data = fetch_result_with_retry(
             api, "liquidation", "liquidation-curve", params=params, as_json=True
         )
-        if liquidation_data is None:
-            st.write("Fetching data for the first time...")
-            st.image(
-                "https://i.gifer.com/origin/8a/8a47f769c400b0b7d81a8f6f8e09a44a_w200.gif"
-            )
-            st.write("Check again in one minute!")
-            st.stop()
-
     except Exception as e:
         st.write(e)
         st.stop()
 
-    # Unpack all returned values
-    (long_fig, short_fig, long_pubkeys, short_pubkeys, long_prices, short_prices) = (
-        plot_liquidation_curves(liquidation_data)
+    if liquidation_data is None:
+        st.write("Fetching data for the first time...")
+        st.image(
+            "https://i.gifer.com/origin/8a/8a47f769c400b0b7d81a8f6f8e09a44a_w200.gif"
+        )
+        st.write("Check again in one minute!")
+        st.stop()
+
+    (
+        long_fig,
+        short_fig,
+        long_pubkeys,
+        short_pubkeys,
+        long_prices,
+        short_prices,
+    ) = plot_liquidation_curves(liquidation_data) or (
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
     )
+
+    if long_prices is None:
+        st.write("No liquidation data available")
+        st.stop()
 
     long_col, short_col = st.columns([1, 1])
 
     with long_col:
         st.plotly_chart(long_fig, use_container_width=True)
 
-        # Add accordion for long positions
         with st.expander("Long Position Accounts"):
             if long_pubkeys and len(long_pubkeys[-1]) > 0:
                 st.write(f"Total Accounts: {len(long_pubkeys[-1])}")

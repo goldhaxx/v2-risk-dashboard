@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import glob
 import json
@@ -27,6 +28,35 @@ def chunk_list(lst, n):
 class Endpoint:
     endpoint: str
     params: dict
+
+
+@dataclass
+class AssetLiabilityEndpoint(Endpoint):
+    mode: int
+    perp_market_index: int
+
+    def __init__(self, mode: int, perp_market_index: int):
+        super().__init__(
+            "asset-liability/matrix",
+            {"mode": mode, "perp_market_index": perp_market_index},
+        )
+
+
+@dataclass
+class PriceShockEndpoint(Endpoint):
+    asset_group: str
+    oracle_distortion: float
+    n_scenarios: int
+
+    def __init__(self, asset_group: str, oracle_distortion: float, n_scenarios: int):
+        super().__init__(
+            "price-shock/usermap",
+            {
+                "asset_group": asset_group,
+                "oracle_distortion": oracle_distortion,
+                "n_scenarios": n_scenarios,
+            },
+        )
 
 
 async def process_multiple_endpoints(state_pickle_path: str, endpoints: list[Endpoint]):
@@ -102,7 +132,6 @@ async def process_multiple_endpoints(state_pickle_path: str, endpoints: list[End
 async def generate_ucache(endpoints: list[Endpoint]):
     """Generate ucache files by splitting endpoints across processes"""
     ucache_dir = "ucache"
-    use_snapshot = os.getenv("USE_SNAPSHOT", "false").lower() == "true"
 
     print("Generating ucache")
     if not os.path.exists(ucache_dir):
@@ -112,12 +141,27 @@ async def generate_ucache(endpoints: list[Endpoint]):
 
 
 async def main():
-    load_dotenv()
+    parser = argparse.ArgumentParser(description="Generate ucache files")
+    parser.add_argument(
+        "--use-snapshot", action="store_true", help="Use existing snapshot"
+    )
 
-    use_snapshot = os.getenv("USE_SNAPSHOT", "false").lower() == "true"
-    print(f"use_snapshot: {use_snapshot}")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
-    if not use_snapshot:
+    # Asset Liability parser
+    al_parser = subparsers.add_parser("asset-liability")
+    al_parser.add_argument("--mode", type=int, required=True)
+    al_parser.add_argument("--perp-market-index", type=int, required=True)
+
+    # Price Shock parser
+    ps_parser = subparsers.add_parser("price-shock")
+    ps_parser.add_argument("--asset-group", type=str, required=True)
+    ps_parser.add_argument("--oracle-distortion", type=float, required=True)
+    ps_parser.add_argument("--n-scenarios", type=int, required=True)
+
+    args = parser.parse_args()
+
+    if not args.use_snapshot:
         state = BackendState()
         state.initialize(os.getenv("RPC_URL") or "")
         print("Taking snapshot")
@@ -125,20 +169,21 @@ async def main():
         await state.take_pickle_snapshot()
         await state.close()
 
-    endpoints = [
-        Endpoint(
-            endpoint="asset-liability/matrix",
-            params={"mode": 0, "perp_market_index": 0},
-        ),
-        Endpoint(
-            endpoint="price-shock/usermap",
-            params={
-                "asset_group": "ignore+stables",
-                "oracle_distortion": 0.05,
-                "n_scenarios": 5,
-            },
-        ),
-    ]
+    endpoints = []
+    if args.command == "asset-liability":
+        endpoints.append(
+            AssetLiabilityEndpoint(
+                mode=args.mode, perp_market_index=args.perp_market_index
+            )
+        )
+    elif args.command == "price-shock":
+        endpoints.append(
+            PriceShockEndpoint(
+                asset_group=args.asset_group,
+                oracle_distortion=args.oracle_distortion,
+                n_scenarios=args.n_scenarios,
+            )
+        )
 
     await generate_ucache(endpoints)
 

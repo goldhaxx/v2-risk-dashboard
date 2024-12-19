@@ -1,18 +1,11 @@
-import asyncio
-from asyncio import AbstractEventLoop
-import os
-import time
 from typing import Any, TypedDict
 
-from anchorpy import Wallet
-from driftpy.account_subscription_config import AccountSubscriptionConfig
-from driftpy.drift_client import DriftClient
-from driftpy.pickle.vat import Vat
-from lib.api import api
 import pandas as pd
 import plotly.graph_objects as go
-from solana.rpc.async_api import AsyncClient
 import streamlit as st
+
+from lib.api import api2
+from utils import get_current_slot
 
 
 class UserLeveragesResponse(TypedDict):
@@ -72,8 +65,8 @@ def price_shock_plot(user_leverages, oracle_distort: float):
     # Sort by Oracle Move to ensure correct line connection order
     df_plot = df_plot.sort_values("Oracle Move (%)")
 
-    # Calculate Perp Bankruptcy AFTER sorting
-    df_plot["Perp Bankruptcy ($)"] = (
+    # Calculate Perpetual Bankruptcy AFTER sorting
+    df_plot["Perpetual Bankruptcy ($)"] = (
         df_plot["Total Bankruptcy ($)"] - df_plot["Spot Bankruptcy ($)"]
     )
 
@@ -82,7 +75,7 @@ def price_shock_plot(user_leverages, oracle_distort: float):
     for column in [
         "Total Bankruptcy ($)",
         "Spot Bankruptcy ($)",
-        "Perp Bankruptcy ($)",
+        "Perpetual Bankruptcy ($)",
     ]:
         fig.add_trace(
             go.Scatter(
@@ -94,7 +87,7 @@ def price_shock_plot(user_leverages, oracle_distort: float):
         )
 
     fig.update_layout(
-        title="Bankruptcies in Crypto Price Scenarios",
+        title="Bankruptcies in Cryptocurrency Price Scenarios",
         xaxis_title="Oracle Move (%)",
         yaxis_title="Bankruptcy ($)",
         legend_title="Bankruptcy Type",
@@ -104,49 +97,28 @@ def price_shock_plot(user_leverages, oracle_distort: float):
     return fig
 
 
-def price_shock_page():
-    # Get query parameters
+def price_shock_cached_page():
     params = st.query_params
-    print(params, "params")
-
     cov = params.get("cov", "ignore stables")
-    oracle_distort = float(params.get("oracle_distort", 0.05))
 
-    cov_col, distort_col = st.columns(2)
-    cov = cov_col.selectbox(
-        "covariance:",
-        [
-            "ignore stables",
-            "sol + lst only",
-            "meme",
-        ],
-        index=["ignore stables", "sol + lst only", "meme"].index(cov),
-    )
-
-    oracle_distort = distort_col.selectbox(
-        "oracle distortion:",
-        [0.05, 0.1, 0.2, 0.5, 1],
-        index=[0.05, 0.1, 0.2, 0.5, 1].index(oracle_distort),
-        help="step size of oracle distortions",
-    )
-
+    oracle_distort = 0.05
+    cov = "ignore stables"
     # Update query parameters
-    st.query_params.update({"cov": cov, "oracle_distort": oracle_distort})
-
+    st.query_params.update({"cov": cov})  # type: ignore
+    n_scenarios = 5
     try:
-        result = api(
-            "price-shock",
-            "usermap",
-            params={
+        result = api2(
+            "price-shock/usermap",
+            _params={
                 "asset_group": cov,
                 "oracle_distortion": oracle_distort,
-                "n_scenarios": 5,
+                "n_scenarios": n_scenarios,
             },
-            as_json=True,
+            key=f"price-shock/usermap_{cov}_{oracle_distort}_{n_scenarios}",
         )
-        # print("RESULT", result)
     except Exception as e:
         print("HIT AN EXCEPTION...", e)
+        return
 
     if "result" in result and result["result"] == "miss":
         st.write("Fetching data for the first time...")
@@ -156,7 +128,11 @@ def price_shock_page():
         st.write("Check again in one minute!")
         st.stop()
 
-    fig = price_shock_plot(result, oracle_distort)
+    current_slot = get_current_slot()
+    st.info(
+        f"This data is for slot {result['slot']}, which is now {int(current_slot) - int(result['slot'])} slots old"
+    )
+    fig = price_shock_plot(result, 0.05)
     st.plotly_chart(fig)
     oracle_down_max = pd.DataFrame(result["leverages_down"][-1])
     with st.expander(

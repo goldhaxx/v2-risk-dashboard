@@ -4,14 +4,13 @@ import streamlit as st
 from dotenv import load_dotenv
 
 from lib.page import header, needs_backend, sidebar
-from page.asset_liability_cached import asset_liab_matrix_cached_page
+from page.asset_liability import asset_liab_matrix_cached_page
 from page.backend import backend_page
 from page.health import health_page
-from page.health_cached import health_cached_page
 from page.liquidation_curves import liquidation_curves_page
 from page.orderbook import orderbook_page
-from page.price_shock_cached import price_shock_cached_page
-from sections.welcome import welcome_page
+from page.price_shock import price_shock_cached_page
+from page.welcome import welcome_page
 
 load_dotenv()
 
@@ -51,27 +50,15 @@ if __name__ == "__main__":
             title="Health",
             icon="🏥",
         ),
-        # st.Page(
-        #     needs_backend(price_shock_page),
-        #     url_path="price-shock",
-        #     title="Price Shock",
-        #     icon="💸",
-        # ),
-        # st.Page(
-        #     needs_backend(asset_liab_matrix_page),
-        #     url_path="asset-liability-matrix",
-        #     title="Asset-Liability Matrix",
-        #     icon="📊",
-        # ),
         st.Page(
             price_shock_cached_page,
-            url_path="price-shock-cached",
+            url_path="price-shock",
             title="Price Shock",
             icon="💸",
         ),
         st.Page(
             asset_liab_matrix_cached_page,
-            url_path="asset-liability-matrix-cached",
+            url_path="asset-liability-matrix",
             title="Asset-Liability Matrix",
             icon="📊",
         ),
@@ -82,14 +69,7 @@ if __name__ == "__main__":
             icon="🌊",
         ),
     ]
-    cached_pages = [
-        st.Page(
-            health_cached_page,
-            url_path="health-cached",
-            title="Health (Cached)",
-            icon="🏥",
-        ),
-    ]
+
     if os.getenv("DEV"):
         main_pages.append(
             st.Page(
@@ -103,7 +83,6 @@ if __name__ == "__main__":
     pg = st.navigation(
         {
             "Main": main_pages,
-            # "Cached": cached_pages,
         }
     )
     pg.run()

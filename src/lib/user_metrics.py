@@ -1,8 +1,7 @@
 import copy
 from typing import List, Optional
 
-from driftpy.constants.numeric_constants import MARGIN_PRECISION
-from driftpy.constants.numeric_constants import QUOTE_PRECISION
+from driftpy.constants.numeric_constants import MARGIN_PRECISION, QUOTE_PRECISION
 from driftpy.constants.perp_markets import mainnet_perp_market_configs
 from driftpy.constants.spot_markets import mainnet_spot_market_configs
 from driftpy.drift_client import DriftClient

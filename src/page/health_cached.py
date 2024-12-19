@@ -1,8 +1,7 @@
-from lib.api import api2
 import plotly.express as px
 import streamlit as st
 
-from utils import fetch_result_with_retry
+from lib.api import api2
 
 
 def health_cached_page():

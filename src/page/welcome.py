@@ -6,27 +6,27 @@ def welcome_page():
     st.title("Drift Risk Dashboard")
     st.markdown("Track key risk metrics across Drift through these dashboard pages")
     st.page_link(
-        StreamlitPage("page/orderbook.py"),
+        StreamlitPage("page/orderbook.py", url_path="orderbook"),
         label="📈 **Orderbook** - Compare hyperliquid price to drift orderbook price",
     )
 
     st.page_link(
-        StreamlitPage("page/health.py"),
+        StreamlitPage("page/health.py", url_path="health"),
         label="🏥 **Health** - View account health distribution and largest positions",
     )
 
     st.page_link(
-        StreamlitPage("page/price_shock.py"),
+        StreamlitPage("page/price_shock.py", url_path="price-shock"),
         label="⚡ **Price Shock** - Analyze the impact of price changes on the protocol",
     )
 
     st.page_link(
-        StreamlitPage("page/asset_liability.py"),
+        StreamlitPage("page/asset_liability.py", url_path="asset-liability-matrix"),
         label="📊 **Asset-Liability Matrix** - Track assets and liabilities across markets and accounts",
     )
 
     st.page_link(
-        StreamlitPage("page/liquidation_curves.py"),
+        StreamlitPage("page/liquidation_curves.py", url_path="liquidation-curves"),
         label="💧 **Liquidations** - Explore liquidation curves and potential risks",
     )
 

@@ -1,7 +1,7 @@
-from lib.api import api
 import plotly.express as px
 import streamlit as st
 
+from lib.api import api
 from utils import fetch_result_with_retry
 
 

@@ -6,7 +6,7 @@ body * {
 }
 
 header.stAppHeader {
-	background: linear-gradient(160deg,#0ab8df 10%,#d867ea 58%,#00295f 90%)
+	background: linear-gradient(160deg,#0ab8df 10%,#d867ea 58%,#00295f 90%);
 }
 section.stMain .block-container {
 	z-index: 1;
