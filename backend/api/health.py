@@ -141,7 +141,7 @@ def get_largest_perp_positions(request: BackendRequest):
                         abs(position.base_asset_amount) / BASE_PRECISION
                     ) * market_price_ui
                     heap_item = (
-                        to_financial(base_asset_value),
+                        base_asset_value,
                         user.user_public_key,
                         position.market_index,
                         position.base_asset_amount / BASE_PRECISION,
