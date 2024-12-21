@@ -99,25 +99,31 @@ def price_shock_plot(user_leverages, oracle_distort: float):
 
 def price_shock_cached_page():
     params = st.query_params
-    cov = params.get("cov", "ignore stables")
+    asset_group = params.get("asset_group", "ignore stables")
 
     oracle_distort = 0.05
-    cov = "ignore stables"
-    # Update query parameters
-    st.query_params.update({"cov": cov})  # type: ignore
+    asset_group = st.selectbox(
+        "Asset Group",
+        ["ignore stables", "jlp only"],
+        index=["ignore stables", "jlp only"].index(asset_group),
+    )
+    st.query_params.update({"asset_group": asset_group})  # type: ignore
+
+    oracle_distort = 0.05
     n_scenarios = 5
     try:
         result = api2(
             "price-shock/usermap",
             _params={
-                "asset_group": cov,
+                "asset_group": asset_group,
                 "oracle_distortion": oracle_distort,
                 "n_scenarios": n_scenarios,
             },
-            key=f"price-shock/usermap_{cov}_{oracle_distort}_{n_scenarios}",
+            key=f"price-shock/usermap_{asset_group}_{oracle_distort}_{n_scenarios}",
         )
     except Exception as e:
         print("HIT AN EXCEPTION...", e)
+        st.error("Failed to fetch data")
         return
 
     if "result" in result and result["result"] == "miss":

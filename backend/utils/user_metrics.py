@@ -163,6 +163,10 @@ def get_skipped_oracles(cov_matrix: Optional[str]) -> List[str]:
     """
     Determine which oracles to skip based on the cov_matrix parameter.
     """
+    if cov_matrix is None:
+        return []
+    if "+" in cov_matrix:
+        cov_matrix = cov_matrix.replace("+", " ")
     groups = {
         "sol only": ["SOL"],
         "sol lst only": ["mSOL", "jitoSOL", "bSOL"],
@@ -170,13 +174,17 @@ def get_skipped_oracles(cov_matrix: Optional[str]) -> List[str]:
         "meme": ["WIF"],
         "wrapped only": ["wBTC", "wETH"],
         "stables only": ["USD"],
+        "jlp only": ["JLP"],
     }
     if cov_matrix in groups:
-        return [
+        print("COV MATRIX found", cov_matrix)
+        oracles = [
             str(x.oracle)
             for x in mainnet_spot_market_configs
             if x.symbol not in groups[cov_matrix]
         ]
+        print("ORACLES", oracles)
+        return oracles
     elif cov_matrix == "ignore stables":
         return [str(x.oracle) for x in mainnet_spot_market_configs if "USD" in x.symbol]
     else:

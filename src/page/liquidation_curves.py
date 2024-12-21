@@ -3,6 +3,7 @@ from collections import defaultdict
 import numpy as np
 import plotly.graph_objects as go
 import streamlit as st
+from driftpy.constants.perp_markets import mainnet_perp_market_configs
 
 from lib.api import api
 from utils import fetch_result_with_retry
@@ -106,8 +107,8 @@ def plot_liquidation_curves(liquidation_data):
 
 
 def liquidation_curves_page():
-    options = [0, 1]
-    labels = ["SOL-PERP", "BTC-PERP"]
+    options = [market.market_index for market in mainnet_perp_market_configs]
+    labels = [market.symbol for market in mainnet_perp_market_configs]
     st.write("Liquidation Curves")
 
     params = st.query_params
