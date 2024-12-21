@@ -190,3 +190,5 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+# python -m backend.scripts.generate_ucache --use-snapshot asset-liability --mode 0 --perp-market-index 0
+# python -m backend.scripts.generate_ucache --use-snapshot price-shock --asset-group "ignore+stables" --oracle-distortion 0.05 --n-scenarios 5
