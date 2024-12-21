@@ -107,7 +107,11 @@ def asset_liab_matrix_cached_page():
         return
 
     if st.session_state.only_high_leverage_mode_users:
-        df = df[df["is_high_leverage"]]
+        if "is_high_leverage" not in df.columns:
+            st.error("High leverage mode data is not available")
+            st.session_state.only_high_leverage_mode_users = False
+        else:
+            df = df[df["is_high_leverage"]]
 
     filtered_df = df[df["leverage"] >= st.session_state.min_leverage].sort_values(
         "leverage", ascending=False
