@@ -87,12 +87,24 @@ def asset_liab_matrix_cached_page():
     )
     st.query_params.update({"perp_market_index": str(perp_market_index)})
 
-    result = api2(
-        "asset-liability/matrix",
-        _params={"mode": mode, "perp_market_index": perp_market_index},
-        key=f"asset-liability/matrix_{mode}_{perp_market_index}",
-    )
+    try:
+        result = api2(
+            "asset-liability/matrix",
+            _params={"mode": mode, "perp_market_index": perp_market_index},
+            key=f"asset-liability/matrix_{mode}_{perp_market_index}",
+        )
+    except Exception as e:
+        st.error(f"Failed to fetch data: {str(e)}")
+        return
+
+    if not isinstance(result, dict) or "df" not in result:
+        st.error("Invalid response format from API")
+        return
+
     df = pd.DataFrame(result["df"])
+    if df.empty:
+        st.warning("No data available for the selected parameters")
+        return
 
     if st.session_state.only_high_leverage_mode_users:
         df = df[df["is_high_leverage"]]
@@ -102,12 +114,19 @@ def asset_liab_matrix_cached_page():
     )
 
     summary_df = generate_summary_data(filtered_df, mode, perp_market_index)
-    slot = result["slot"]
-    current_slot = get_current_slot()
+    
+    # Get slot information if available
+    slot = result.get("slot")
+    if slot is not None:
+        try:
+            current_slot = get_current_slot()
+            st.info(
+                f"This data is for slot {slot}, which is now {int(current_slot) - int(slot)} slots old"
+            )
+        except Exception as e:
+            print(f"Error getting current slot: {e}")
+            # Continue without showing slot information
 
-    st.info(
-        f"This data is for slot {slot}, which is now {int(current_slot) - int(slot)} slots old"
-    )
     st.write(f"{df.shape[0]} users")
     st.checkbox(
         "Only show high leverage mode users", key="only_high_leverage_mode_users"
