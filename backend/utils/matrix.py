@@ -1,8 +1,11 @@
 import pandas as pd
+import logging
 from driftpy.constants.spot_markets import mainnet_spot_market_configs
 from driftpy.pickle.vat import Vat
 
 from backend.utils.user_metrics import get_user_leverages_for_asset_liability
+
+logger = logging.getLogger(__name__)
 
 
 def calculate_effective_leverage(assets: float, liabilities: float) -> float:
@@ -18,7 +21,9 @@ def format_metric(
 
 async def get_matrix(vat: Vat, mode: int = 0, perp_market_index: int = 0):
     NUMBER_OF_SPOT = len(mainnet_spot_market_configs)
+    logger.info(f"Processing data for {NUMBER_OF_SPOT} spot markets...")
 
+    logger.info("Calculating user leverages...")
     res = get_user_leverages_for_asset_liability(vat.users)
     leverage_data = {
         0: res["leverages_none"],
@@ -32,9 +37,11 @@ async def get_matrix(vat: Vat, mode: int = 0, perp_market_index: int = 0):
         if mode in [2, 3]
         else res["user_keys"]
     )
+    logger.info(f"Processing data for {len(user_keys)} users...")
 
     df = pd.DataFrame(leverage_data[mode], index=user_keys)
 
+    logger.info("Initializing market columns...")
     new_columns = {}
     for i in range(NUMBER_OF_SPOT):
         prefix = f"spot_{i}"
@@ -49,6 +56,7 @@ async def get_matrix(vat: Vat, mode: int = 0, perp_market_index: int = 0):
         for col in column_names:
             new_columns[col] = pd.Series(0.0, index=df.index)
 
+    logger.info("Calculating market metrics for each user...")
     for idx, row in df.iterrows():
         spot_asset = row["spot_asset"]
 
@@ -67,15 +75,12 @@ async def get_matrix(vat: Vat, mode: int = 0, perp_market_index: int = 0):
             }
 
             net_perp = float(row["net_p"][perp_market_index])
-            print(f"net_perp value: {net_perp}, type: {type(net_perp)}")
 
             if net_perp > 0:
-                print("Net perp above 0")
                 metrics[f"{base_name}_perp_{perp_market_index}_long"] = (
                     value / spot_asset * net_perp
                 )
             if net_perp < 0:
-                print("Net perp below 0")
                 metrics[f"{base_name}_perp_{perp_market_index}_short"] = (
                     value / spot_asset * net_perp
                 )
@@ -83,5 +88,8 @@ async def get_matrix(vat: Vat, mode: int = 0, perp_market_index: int = 0):
             for col, val in metrics.items():
                 new_columns[col][idx] = val
 
+    logger.info("Finalizing DataFrame...")
     df = pd.concat([df, pd.DataFrame(new_columns)], axis=1)
+    logger.info("Matrix calculation complete")
+    
     return df

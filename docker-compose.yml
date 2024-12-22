@@ -6,6 +6,8 @@ services:
     ports:
       - "8000:8000"
     container_name: app-backend
+    volumes:
+      - ./logs:/logs
     networks:
       - app-network
 

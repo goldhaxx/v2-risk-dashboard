@@ -1,10 +1,12 @@
 import pandas as pd
 import streamlit as st
+import time
 from driftpy.constants.perp_markets import mainnet_perp_market_configs
 from driftpy.constants.spot_markets import mainnet_spot_market_configs
 
 from lib.api import api2
 from utils import get_current_slot
+
 
 options = [0, 1, 2, 3]
 labels = [
@@ -24,6 +26,15 @@ def format_metric(
 ) -> str:
     formatted = f"{value:,.2f}" if financial else f"{value:.2f}"
     return f"{formatted} ✅" if should_highlight and mode > 0 else formatted
+
+
+def format_time(seconds: float) -> str:
+    """Format time duration in a human-readable format."""
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    minutes = int(seconds // 60)
+    seconds = seconds % 60
+    return f"{minutes}m {seconds:.1f}s"
 
 
 def generate_summary_data(
@@ -67,6 +78,8 @@ def asset_liab_matrix_cached_page():
         st.session_state.min_leverage = 0.0
     if "only_high_leverage_mode_users" not in st.session_state:
         st.session_state.only_high_leverage_mode_users = False
+    if "load_times" not in st.session_state:
+        st.session_state.load_times = {}
 
     params = st.query_params
     mode = int(params.get("mode", 0))
@@ -87,38 +100,119 @@ def asset_liab_matrix_cached_page():
     )
     st.query_params.update({"perp_market_index": str(perp_market_index)})
 
+    # Create containers for timing information
+    timing_container = st.container()
+    with timing_container:
+        #st.write("### Loading Times")
+        timing_table = st.empty()
+    
+    # Create a container for the loading spinner and status
+    loading_container = st.container()
+    
     try:
-        result = api2(
-            "asset-liability/matrix",
-            _params={"mode": mode, "perp_market_index": perp_market_index},
-            key=f"asset-liability/matrix_{mode}_{perp_market_index}",
+        start_time = time.time()
+        load_times = {}
+        
+        # Create a placeholder for the timer
+        timer_placeholder = st.empty()
+        status_container = st.empty()
+        
+        while True:
+            # Update timer
+            elapsed = time.time() - start_time
+            timer_placeholder.markdown(f"### Loading asset-liability matrix... ({format_time(elapsed)})")
+            
+            try:
+                # Fetching data from backend
+                step_start = time.time()
+                status_container.info("⏳ Fetching data from backend...")
+                
+                result = api2(
+                    "asset-liability/matrix",
+                    _params={"mode": mode, "perp_market_index": perp_market_index},
+                    key=f"asset-liability/matrix_{mode}_{perp_market_index}_{int(time.time())}",
+                )
+                
+                step_duration = time.time() - step_start
+                load_times["Fetch Data"] = step_duration
+                break  # Exit the loop once data is fetched
+                
+            except Exception as e:
+                if "timeout" not in str(e).lower():  # If it's not a timeout error, raise it
+                    raise e
+                time.sleep(0.1)  # Small delay before retrying
+                continue
+        
+        # Processing market data
+        step_start = time.time()
+        status_container.info("⚡ Processing market data...")
+        
+        if not isinstance(result, dict) or "df" not in result:
+            st.error("Invalid response format from API")
+            return
+
+        df = pd.DataFrame(result["df"])
+        if df.empty:
+            st.warning("No data available for the selected parameters")
+            return
+        
+        step_duration = time.time() - step_start
+        load_times["Process Data"] = step_duration
+
+        # Calculating metrics
+        step_start = time.time()
+        status_container.info("📊 Calculating market metrics...")
+        
+        if st.session_state.only_high_leverage_mode_users:
+            if "is_high_leverage" not in df.columns:
+                st.error("High leverage mode data is not available")
+                st.session_state.only_high_leverage_mode_users = False
+            else:
+                df = df[df["is_high_leverage"]]
+
+        filtered_df = df[df["leverage"] >= st.session_state.min_leverage].sort_values(
+            "leverage", ascending=False
         )
+        
+        step_duration = time.time() - step_start
+        load_times["Calculate Metrics"] = step_duration
+
+        # Generating summary
+        step_start = time.time()
+        status_container.info("🔄 Generating summary data...")
+        
+        summary_df = generate_summary_data(filtered_df, mode, perp_market_index)
+        
+        step_duration = time.time() - step_start
+        load_times["Generate Summary"] = step_duration
+        
+        # Calculate total time
+        total_time = time.time() - start_time
+        load_times["Total Time"] = total_time
+        
+        # Update final timer display
+        timer_placeholder.markdown(f"### Loading Times")
+        
+        # Store the load times in session state
+        st.session_state.load_times = load_times
+        
+        # Clear the status container after loading is complete
+        status_container.empty()
+
+        # Display timing information
+        timing_df = pd.DataFrame(
+            {
+                "Duration": [format_time(t) for t in load_times.values()],
+                "Percentage": [f"{(t/load_times['Total Time'])*100:.1f}%" for t in load_times.values()]
+            },
+            index=load_times.keys()
+        )
+        st.table(timing_df)
+
     except Exception as e:
         st.error(f"Failed to fetch data: {str(e)}")
         return
 
-    if not isinstance(result, dict) or "df" not in result:
-        st.error("Invalid response format from API")
-        return
-
-    df = pd.DataFrame(result["df"])
-    if df.empty:
-        st.warning("No data available for the selected parameters")
-        return
-
-    if st.session_state.only_high_leverage_mode_users:
-        if "is_high_leverage" not in df.columns:
-            st.error("High leverage mode data is not available")
-            st.session_state.only_high_leverage_mode_users = False
-        else:
-            df = df[df["is_high_leverage"]]
-
-    filtered_df = df[df["leverage"] >= st.session_state.min_leverage].sort_values(
-        "leverage", ascending=False
-    )
-
-    summary_df = generate_summary_data(filtered_df, mode, perp_market_index)
-    
     # Get slot information if available
     slot = result.get("slot")
     if slot is not None:
