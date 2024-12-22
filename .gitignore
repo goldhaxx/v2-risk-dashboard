@@ -7,3 +7,5 @@ pickles/*
 cache
 ignore
 ucache
+matrix_response.json
+logs/*
