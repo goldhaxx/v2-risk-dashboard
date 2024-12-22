@@ -75,6 +75,7 @@ class BackendState:
         )
         self.ready = False
         self.current_pickle_path = "bootstrap"
+        self.last_oracle_slot = 0
 
     async def bootstrap(self):
         with waiting_for("drift client"):
