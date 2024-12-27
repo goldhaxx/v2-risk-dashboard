@@ -1,5 +1,4 @@
 import copy
-import functools
 from typing import List, Optional
 
 from driftpy.accounts.cache import DriftClientCache
@@ -57,28 +56,16 @@ def get_perp_liab_composition(x: DriftUser, margin_category, n):
     return net_p
 
 
-@functools.cache
-def get_stable_metrics(x: DriftUser):
-    unrealized_pnl = x.get_unrealized_pnl(True)
-    net_spot_market_value = x.get_net_spot_market_value(None)
-    net_usd_value = (net_spot_market_value + unrealized_pnl) / QUOTE_PRECISION
-    return {
-        "user_key": x.user_public_key,
-        "is_high_leverage": x.is_high_leverage_mode(),
-        "leverage": x.get_leverage() / MARGIN_PRECISION,
-        "upnl": unrealized_pnl / QUOTE_PRECISION,
-        "net_usd_value": net_usd_value,
-    }
-
-
 def get_user_metrics_for_asset_liability(
     x: DriftUser,
     margin_category: MarginCategory,
 ):
     """
-    Returns a dictionary of the user's health, leverage, and other metrics.
+    Returns a dictionary of the user's health, leverage, and other metrics,
+    plus columns for four safety checks and the resulting Target Scale IAW.
     """
 
+    # Basic existing metrics
     asset_value = x.get_spot_market_asset_value(None, margin_category) / QUOTE_PRECISION
     liability_value = (
         x.get_spot_market_liability_value(None, margin_category) / QUOTE_PRECISION
@@ -86,28 +73,80 @@ def get_user_metrics_for_asset_liability(
     perp_liability = (
         x.get_total_perp_position_liability(margin_category) / QUOTE_PRECISION
     )
+    unrealized_pnl = x.get_unrealized_pnl(True)
+    net_spot_market_value = x.get_net_spot_market_value(None)
+    net_usd_value = (net_spot_market_value + unrealized_pnl) / QUOTE_PRECISION
 
-    metrics_stable = get_stable_metrics(x)
-    metrics_unstable = {
+    metrics = {
+        "user_key": x.user_public_key,
+        "is_high_leverage": x.is_high_leverage_mode(),
+        "leverage": x.get_leverage() / MARGIN_PRECISION,
+        "upnl": unrealized_pnl / QUOTE_PRECISION,
+        "net_usd_value": net_usd_value,
         "perp_liability": perp_liability,
         "spot_asset": asset_value,
         "spot_liability": liability_value,
     }
 
-    metrics = {
-        **metrics_stable,
-        **metrics_unstable,
-    }
-
+    # Existing health logic
     if margin_category == MarginCategory.INITIAL:
         metrics["health"] = get_init_health(x)
     else:
         metrics["health"] = x.get_health()
 
+    # Collateral composition
     NUMBER_OF_SPOT = len(mainnet_spot_market_configs)
     NUMBER_OF_PERP = len(mainnet_perp_market_configs)
     metrics["net_v"] = get_collateral_composition(x, margin_category, NUMBER_OF_SPOT)
     metrics["net_p"] = get_perp_liab_composition(x, margin_category, NUMBER_OF_PERP)
+
+    # -------------------------
+    # NEW COLUMNS: Pass/Fail checks + Target Scale IAW
+    # -------------------------
+    #
+    # For demonstration, we use placeholders or simplified calculations:
+    # 1) On-Chain Liquidity Check
+    #    - Placeholder for a Jupiter price impact. We simulate price_impact=0.05.
+    #    - Maint asset weight is assumed 0.9 => if price_impact < (1 - 0.9)=0.1 => pass
+    # 2) Effective Leverage (Spot Positions)
+    #    - pass if user's "leverage" < (0.5 * 0.9)=0.45 (simple placeholder).
+    # 3) Effective Leverage (Perp Positions)
+    #    - pass if 1.0 <= user's "leverage" <= 2.0
+    # 4) Excess Leverage Coverage (Perp Market Insurance)
+    #    - pass if leverage <= 2.0 or if "excess coverage" is enough (placeholder).
+    #    - We'll assume the "insurance_fund=5_000_000" and if user has (leverage-2)*whatever, coverage is pass if < insurance_fund.
+
+    # 1) On-Chain Liquidity Check
+    price_impact = 0.05  # placeholder
+    pass_on_chain_liq = price_impact < (1 - 0.9)
+
+    # 2) Effective Leverage (Spot)
+    pass_spot_eff_lev = (metrics["leverage"] < 0.45)
+
+    # 3) Effective Leverage (Perp)
+    pass_perp_eff_lev = (1.0 <= metrics["leverage"] <= 2.0)
+
+    # 4) Excess Leverage Coverage
+    insurance_fund = 5_000_000  # placeholder
+    # We'll assume "excess notional" is (net_usd_value - (net_usd_value / 2 if leverage>2 else 0)), purely for example
+    # In reality, you'd handle each user's actual coverage logic.
+    if metrics["leverage"] > 2.0:
+        excess_notional = (metrics["leverage"] - 2.0) * asset_value
+        pass_excess_lev_coverage = (excess_notional < insurance_fund)
+    else:
+        pass_excess_lev_coverage = True
+
+    metrics["on_chain_liquidity_pass"] = "Pass" if pass_on_chain_liq else "Fail"
+    metrics["spot_eff_lev_pass"] = "Pass" if pass_spot_eff_lev else "Fail"
+    metrics["perp_eff_lev_pass"] = "Pass" if pass_perp_eff_lev else "Fail"
+    metrics["excess_lev_coverage_pass"] = "Pass" if pass_excess_lev_coverage else "Fail"
+
+    # If all pass => target_scale_iaw = 1.2 * net_usd_value
+    # else => "N/A"
+    if all([pass_on_chain_liq, pass_spot_eff_lev, pass_perp_eff_lev, pass_excess_lev_coverage]):
+        metrics["target_scale_iaw"] = 1.2 * net_usd_value
+    else:
+        metrics["target_scale_iaw"] = "N/A"
 
     return metrics
 
