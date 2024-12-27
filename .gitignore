@@ -10,4 +10,4 @@ ignore
 ucache
 matrix_response.json
 logs/*
-documentation/*
+.DS_Store
