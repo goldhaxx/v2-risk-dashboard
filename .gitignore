@@ -1,9 +1,11 @@
-venv
 .mypy_cache
 **/__pycache__/
 .env
-.venv
+venv
+.venv*
+venv_*
 pickles/*
 cache
 ignore
 ucache
+logs/*
