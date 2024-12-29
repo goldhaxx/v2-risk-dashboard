@@ -29,6 +29,8 @@ class CacheMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
         if not request.url.path.startswith("/api"):
             return await call_next(request)
+        if request.url.path.startswith("/api/health/spot_asset_value/"):
+            return await call_next(request)
 
         current_pickle = self.state.current_pickle_path
         previous_pickles = self._get_previous_pickles(4)  # Get last 4 pickles

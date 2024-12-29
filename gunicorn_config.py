@@ -5,8 +5,8 @@ timeout = 300
 keepalive = 65
 max_requests = 1000
 max_requests_jitter = 50
-accesslog = "/logs/access.log"
-errorlog = "/logs/error.log"
+accesslog = "logs/access.log"
+errorlog = "logs/error.log"
 loglevel = "debug"
 
 # Restart workers that die unexpectedly

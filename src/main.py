@@ -12,6 +12,7 @@ from page.orderbook import orderbook_page
 from page.price_shock import price_shock_cached_page
 from page.welcome import welcome_page
 from page.swap import show as swap_page
+from page.target_scale_iaw import target_scale_iaw_page
 
 load_dotenv()
 
@@ -56,6 +57,12 @@ if __name__ == "__main__":
             url_path="health",
             title="Health",
             icon="🏥",
+        ),
+        st.Page(
+            needs_backend(target_scale_iaw_page),
+            url_path="target-scale-iaw",
+            title="Target Scale IAW",
+            icon="⚖️",
         ),
         st.Page(
             price_shock_cached_page,

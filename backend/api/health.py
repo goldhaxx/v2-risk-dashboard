@@ -5,6 +5,7 @@ from driftpy.constants import BASE_PRECISION, PRICE_PRECISION, SPOT_BALANCE_PREC
 from driftpy.pickle.vat import Vat
 from driftpy.types import is_variant
 from fastapi import APIRouter
+from pydantic import BaseModel
 
 from backend.state import BackendRequest
 
@@ -370,3 +371,41 @@ def get_most_levered_spot_borrows_above_1m(request: BackendRequest):
     }
 
     return data
+
+
+@router.get("/spot_asset_value/{wallet_address}")
+async def get_spot_asset_value(request: BackendRequest, wallet_address: str):
+    """
+    Get the spot asset value for a specific wallet address.
+
+    Args:
+        wallet_address (str): The public key/wallet address to query as URL parameter
+
+    Returns:
+        dict: A dictionary containing the spot asset value for the wallet:
+        - spot_asset_value (float): The total spot asset value in USD
+        - wallet_address (str): The queried wallet address
+    """
+    vat: Vat = request.state.backend_state.vat
+    
+    # Try to find the user in the vat
+    user = vat.users.get(wallet_address)
+    if user is None:
+        return {
+            "error": "Wallet address not found",
+            "wallet_address": wallet_address,
+            "spot_asset_value": 0
+        }
+
+    try:
+        spot_asset_value = user.get_spot_market_asset_value(None, None) / PRICE_PRECISION
+        return {
+            "wallet_address": wallet_address,
+            "spot_asset_value": spot_asset_value
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "wallet_address": wallet_address,
+            "spot_asset_value": 0
+        }
