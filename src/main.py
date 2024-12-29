@@ -11,6 +11,7 @@ from page.liquidation_curves import liquidation_curves_page
 from page.orderbook import orderbook_page
 from page.price_shock import price_shock_cached_page
 from page.welcome import welcome_page
+from page.swap import show as swap_page
 
 load_dotenv()
 
@@ -37,6 +38,12 @@ if __name__ == "__main__":
             url_path="welcome",
             title="Welcome",
             icon="🏠",
+        ),
+        st.Page(
+            swap_page,
+            url_path="swap",
+            title="Swap",
+            icon="🔄",
         ),
         st.Page(
             orderbook_page,
