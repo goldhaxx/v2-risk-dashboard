@@ -9,3 +9,4 @@ cache
 ignore
 ucache
 logs/*
+/zCacheBak

@@ -238,7 +238,7 @@ def generate_summary_data(
     """Generate summary statistics for each market.
     
     This function:
-    1. Gets the largest spot borrows
+    1. Gets the largest spot borrows per market
     2. For each market:
         - Calculates total assets and liabilities
         - Gets spot and perp positions
@@ -255,8 +255,8 @@ def generate_summary_data(
     logging.info("Generating summary data")
     summary_data = {}
     
-    # Get largest spot borrows data
-    largest_borrows = get_largest_spot_borrows()
+    # Get largest spot borrows data per market
+    largest_borrows = get_largest_spot_borrow_per_market()
     
     # Process each market
     for i in range(len(mainnet_spot_market_configs)):
@@ -265,11 +265,11 @@ def generate_summary_data(
         assets = df[f"{prefix}_all_assets"].sum()
         liabilities = df[f"{prefix}_all"].sum()
         
-        # Find the scaled balance for this market if it exists in largest borrows
+        # Find the scaled balance for this market
         try:
             idx = largest_borrows["market_indices"].index(i)
             scaled_balance = largest_borrows["scaled_balances"][idx]
-            logging.info(f"Found scaled balance for market {i}: {scaled_balance}")
+            logging.info(f"Found scaled balance for market {i}: {scaled_balance} (value: ${largest_borrows['values'][idx]:,.2f}, user: {largest_borrows['public_keys'][idx]})")
         except (ValueError, IndexError):
             scaled_balance = 0
             logging.info(f"No scaled balance found for market {i}, using 0")
@@ -405,3 +405,34 @@ def asset_liab_matrix_cached_page():
             f"{len(toshow)} users with this asset to cover liabilities (with {st.session_state.min_leverage}x leverage or more)"
         )
         tab.dataframe(toshow, hide_index=True)
+
+
+def get_largest_spot_borrow_per_market():
+    """Fetch the largest spot borrow for each market from the API.
+    
+    Returns:
+        Dictionary containing:
+        - market_indices: List of market indices
+        - scaled_balances: List of borrow amounts in token units
+        - values: List of USD values of the borrows
+        - public_keys: List of borrower public keys
+    """
+    logging.info("Fetching largest spot borrows per market")
+    try:
+        response = api2("health/largest_spot_borrow_per_market")
+        result = {
+            "market_indices": response["Market Index"],
+            "scaled_balances": [float(bal.replace(",", "")) for bal in response["Scaled Balance"]],
+            "values": [float(val.replace("$", "").replace(",", "")) for val in response["Value"]],
+            "public_keys": response["Public Key"]
+        }
+        logging.info(f"Largest spot borrows per market received: {result}")
+        return result
+    except Exception as e:
+        logging.error(f"Error fetching largest spot borrows per market: {str(e)}")
+        return {
+            "market_indices": [], 
+            "scaled_balances": [],
+            "values": [],
+            "public_keys": []
+        }
