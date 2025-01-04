@@ -81,5 +81,10 @@ def api2(url: str, _params: Optional[dict] = None, key: str = "") -> dict:
     if response.status_code != 200:
         raise Exception(f"Failed to fetch from R2: {response.status_code}")
 
-    response_data = response.json()
-    return response_data["content"]
+    try:
+        response_data = response.json()
+        return response_data["content"]
+    except requests.exceptions.JSONDecodeError as e:
+        error_message = f"Cache file for {url} is malformed. Please regenerate the cache."
+        print(error_message)
+        raise Exception(error_message) from e
