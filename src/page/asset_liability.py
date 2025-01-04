@@ -274,6 +274,16 @@ def generate_summary_data(
             scaled_balance = 0
             logging.info(f"No scaled balance found for market {i}, using 0")
 
+        # Check price impact and add tooltip
+        price_impact_status = check_price_impact(i, scaled_balance)
+        tooltip = {
+            PriceImpactStatus.PASS: "Price impact is below threshold - safe to liquidate",
+            PriceImpactStatus.NO_BALANCE: "No balance to check - informational only",
+            PriceImpactStatus.QUOTE_TOKEN: "USDC or quote token - no price impact check needed",
+            PriceImpactStatus.FAIL: "Price impact above threshold - unsafe to liquidate"
+        }[price_impact_status]
+        price_impact_check = f'<span title="{tooltip}">{price_impact_status}</span>'
+
         # Build summary data for this market
         summary_data[f"spot{i}"] = {
             "all_assets": assets,
@@ -293,7 +303,7 @@ def generate_summary_data(
             f"perp_{perp_market_index}_short": df[
                 f"{prefix}_perp_{perp_market_index}_short"
             ].sum(),
-            "price_impact_check": check_price_impact(i, scaled_balance)
+            "price_impact_check": price_impact_check
         }
     
     logging.info("Summary data generation complete")
@@ -373,7 +383,15 @@ def asset_liab_matrix_cached_page():
         0.0,
         key="min_leverage",
     )
-    st.write(summary_df)
+
+    # Add tooltip to price_impact_check column header
+    price_impact_check_header = '<span title="Indicates if liquidating a position would have too much price impact. Calculated based on the largest spot borrow per market and compared against the maintenance asset weight.">Price Impact Check</span>'
+    summary_df.columns = [
+        col if col != "price_impact_check" else price_impact_check_header
+        for col in summary_df.columns
+    ]
+
+    st.write(summary_df.to_html(escape=False), unsafe_allow_html=True)
 
     # Create detailed view tabs
     tabs = st.tabs(["FULL"] + [x.symbol for x in mainnet_spot_market_configs])
