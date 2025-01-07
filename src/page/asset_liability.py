@@ -52,7 +52,6 @@ def get_jupiter_quote(input_mint: str, output_mint: str, amount: int) -> float:
     Returns:
         Price impact as a decimal (e.g., 0.01 = 1%)
     """
-    # Skip if trying to swap same token
     if input_mint == output_mint:
         logging.info("Input and output mints are the same, skipping Jupiter quote")
         return 0
@@ -190,7 +189,6 @@ def check_price_impact(market_index: int, scaled_balance: float) -> PriceImpactS
         logging.error(f"Error in price impact check: {str(e)}")
         return PriceImpactStatus.PASS
 
-
 def check_spot_leverage(market_index: int, assets: float, liabilities: float, maintenance_asset_weight: float) -> str:
     """
     Criterion 2: Effective Leverage (Spot Positions)
@@ -202,11 +200,23 @@ def check_spot_leverage(market_index: int, assets: float, liabilities: float, ma
     threshold = 0.5 * maintenance_asset_weight
     return "✅" if spot_effective_leverage < threshold else "❌"
 
+def check_perp_leverage(total_perp_liability: float, total_net_usd: float) -> str:
+    """
+    Criterion 3: Effective Leverage (Perp Positions)
+    Pass if 1 <= (perp_liability / total_net_usd) <= 2
+    If no perp liability or no net usd, return info marker.
+    """
+    if total_net_usd <= 0 or total_perp_liability <= 0:
+        return "ℹ️"
+    perp_lev = total_perp_liability / total_net_usd
+    if 1 <= perp_lev <= 2:
+        return "✅"
+    return "❌"
 
 def generate_summary_data(
     df: pd.DataFrame, mode: int, perp_market_index: int
 ) -> pd.DataFrame:
-    """Generate summary statistics for each market."""
+    """Generate summary statistics for each market, focusing on #1 On-Chain Liquidity, #2 Spot Leverage, #3 Perp Leverage."""
     logging.info("Generating summary data")
     summary_data = {}
     
@@ -225,7 +235,7 @@ def generate_summary_data(
         except (ValueError, IndexError):
             scaled_balance = 0
         
-        # Price impact check
+        # Criterion #1: Price Impact Check
         price_impact_status = check_price_impact(i, scaled_balance)
         tooltip_map = {
             PriceImpactStatus.PASS: "Price impact is below threshold - safe to liquidate",
@@ -236,24 +246,33 @@ def generate_summary_data(
         tooltip = tooltip_map.get(price_impact_status, "Unknown")
         price_impact_check = f'<span title="{tooltip}">{price_impact_status}</span>'
         
-        # Get maintenance asset weight
+        # Criterion #2: Spot Leverage Check
         maint_asset_weight = get_maintenance_asset_weight(i)
-        
-        # Check #2: Effective Leverage (Spot Positions)
         spot_leverage_result = check_spot_leverage(i, assets, liabilities, maint_asset_weight)
         spot_leverage_tooltip = (
             "Spot Effective Leverage must be < 0.5 * maint_asset_weight to PASS."
         )
         spot_leverage_check = f'<span title="{spot_leverage_tooltip}">{spot_leverage_result}</span>'
         
-        # Optionally set "Target Scale IAW" example if both checks pass
-        # (Real logic for all 4 criteria would go here eventually)
-        if price_impact_status == PriceImpactStatus.PASS and spot_leverage_result == "✅":
+        # Criterion #3: Perp Leverage Check
+        perp_liab = abs(df[f"{prefix}_all_perp"].sum())  # total perp liability for this market
+        net_usd = (assets - liabilities)  # approximate net usable
+        perp_leverage_result = check_perp_leverage(perp_liab, net_usd)
+        perp_leverage_tooltip = "Perp Effective Leverage must be between 1x and 2x to PASS."
+        perp_leverage_check = f'<span title="{perp_leverage_tooltip}">{perp_leverage_result}</span>'
+        
+        # Target Scale IAW logic: must pass #1, #2, #3
+        checks_passed = (
+            price_impact_status == PriceImpactStatus.PASS
+            and spot_leverage_result == "✅"
+            and perp_leverage_result == "✅"
+        )
+        if checks_passed:
             target_scale_iaw_value = 1.2 * assets
         else:
-            target_scale_iaw_value = 0.0  # or "N/A"
+            target_scale_iaw_value = 0.0
         
-        # Build summary
+        # Build final row for this market
         summary_data[f"spot{i}"] = {
             "all_assets": assets,
             "all_liabilities": format_metric(
@@ -268,11 +287,12 @@ def generate_summary_data(
             "all_perp": df[f"{prefix}_all_perp"].sum(),
             f"perp_{perp_market_index}_long": df[f"{prefix}_perp_{perp_market_index}_long"].sum(),
             f"perp_{perp_market_index}_short": df[f"{prefix}_perp_{perp_market_index}_short"].sum(),
-            "price_impact_check": price_impact_check,
-            "spot_leverage_check": spot_leverage_check,
-            "target_scale_iaw": f"{target_scale_iaw_value:,.2f}" if target_scale_iaw_value else "N/A"
+            "Price Impact Check": price_impact_check,
+            "Spot Leverage Check": spot_leverage_check,
+            "Perp Leverage Check": perp_leverage_check,
+            "Target Scale IAW": f"{target_scale_iaw_value:,.2f}" if target_scale_iaw_value else "N/A",
         }
-    
+
     logging.info("Summary data generation complete")
     return pd.DataFrame(summary_data).T
 
@@ -340,24 +360,6 @@ def asset_liab_matrix_cached_page():
         0.0,
         key="min_leverage",
     )
-
-    # Add tooltip to price_impact_check column header
-    price_impact_check_header = '<span title="Indicates if liquidating a position would have too much price impact. Calculated based on the largest spot borrow per market and compared against the maintenance asset weight.">Price Impact Check</span>'
-    spot_leverage_check_header = '<span title="Pass if (Spot Liabilities/Spot Assets) < 0.5 * maintenance_asset_weight.">Spot Leverage Check</span>'
-
-    # Also rename the last column with a tooltip about how "Target Scale IAW" is set
-    target_scale_iaw_header = '<span title="If both price impact and spot leverage checks pass, we set 1.2x of spot assets for demonstration.">Target Scale IAW</span>'
-
-    rename_map = {}
-    for col in summary_df.columns:
-        if col == "price_impact_check":
-            rename_map[col] = price_impact_check_header
-        elif col == "spot_leverage_check":
-            rename_map[col] = spot_leverage_check_header
-        elif col == "target_scale_iaw":
-            rename_map[col] = target_scale_iaw_header
-
-    summary_df = summary_df.rename(columns=rename_map)
 
     st.write(summary_df.to_html(escape=False), unsafe_allow_html=True)
 
