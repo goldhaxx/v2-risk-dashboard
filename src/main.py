@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from lib.page import header, needs_backend, sidebar
 from page.asset_liability import asset_liab_matrix_cached_page
 from page.backend import backend_page
+from page.deposits import deposits_page
 from page.health import health_page
 from page.liquidation_curves import liquidation_curves_page
 from page.orderbook import orderbook_page
@@ -67,6 +68,12 @@ if __name__ == "__main__":
             url_path="liquidation-curves",
             title="Liquidation Curves",
             icon="🌊",
+        ),
+        st.Page(
+            needs_backend(deposits_page),
+            url_path="deposits",
+            title="Deposits",
+            icon="💰",
         ),
     ]
 

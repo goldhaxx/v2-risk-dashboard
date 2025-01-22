@@ -1,12 +1,10 @@
-import json
 import os
 from typing import Optional
 
-from dotenv import load_dotenv
 import pandas as pd
 import requests
 import streamlit as st
-
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -52,7 +50,7 @@ def api(
 @st.cache_data(ttl=1000)
 def api2(url: str, _params: Optional[dict] = None, key: str = "") -> dict:
     """
-    Fetch data from R2 storage using the simplified naming scheme.
+    Fetch data from storage using the simplified naming scheme.
     Example: /api/health/health_distribution -> GET_api_health_health_distribution.json
     Example with params: /api/price-shock/usermap?asset_group=ignore+stables&oracle_distortion=0.05
         -> GET_api_price-shock_usermap__asset_group-ignore+stables_oracle_distortion-0.05.json

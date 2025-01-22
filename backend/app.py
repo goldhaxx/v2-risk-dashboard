@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from backend.api import (
     asset_liability,
+    deposits,
     health,
     liquidation,
     metadata,
@@ -66,6 +67,7 @@ app.include_router(
 )
 app.include_router(snapshot.router, prefix="/api/snapshot", tags=["snapshot"])
 app.include_router(ucache.router, prefix="/api/ucache", tags=["ucache"])
+app.include_router(deposits.router, prefix="/api/deposits", tags=["deposits"])
 
 
 # NOTE: All other routes should be in /api/* within the /api folder. Routes outside of /api are not exposed in k8s
