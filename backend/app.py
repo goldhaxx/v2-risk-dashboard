@@ -11,6 +11,7 @@ from backend.api import (
     health,
     liquidation,
     metadata,
+    pnl,
     price_shock,
     snapshot,
     ucache,
@@ -68,6 +69,7 @@ app.include_router(
 app.include_router(snapshot.router, prefix="/api/snapshot", tags=["snapshot"])
 app.include_router(ucache.router, prefix="/api/ucache", tags=["ucache"])
 app.include_router(deposits.router, prefix="/api/deposits", tags=["deposits"])
+app.include_router(pnl.router, prefix="/api/pnl", tags=["pnl"])
 
 
 # NOTE: All other routes should be in /api/* within the /api folder. Routes outside of /api are not exposed in k8s

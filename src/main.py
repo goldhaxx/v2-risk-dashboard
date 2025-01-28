@@ -10,6 +10,7 @@ from page.deposits import deposits_page
 from page.health import health_page
 from page.liquidation_curves import liquidation_curves_page
 from page.orderbook import orderbook_page
+from page.pnl import pnl_page
 from page.price_shock import price_shock_cached_page
 from page.welcome import welcome_page
 
@@ -73,6 +74,12 @@ if __name__ == "__main__":
             needs_backend(deposits_page),
             url_path="deposits",
             title="Deposits",
+            icon="💰",
+        ),
+        st.Page(
+            needs_backend(pnl_page),
+            url_path="pnl",
+            title="PnL",
             icon="💰",
         ),
     ]
