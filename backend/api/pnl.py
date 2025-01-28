@@ -24,7 +24,7 @@ def get_top_pnl(request: BackendRequest, limit: int = 1000):
                     "realized_pnl": realized_pnl,
                     "unrealized_pnl": unrealized_pnl,
                     "total_pnl": total_pnl,
-                    "collateral": user.get_total_collateral() / 1e6,
+                    # "collateral": user.get_total_collateral() / 1e6,
                 }
             )
         except Exception as e:
