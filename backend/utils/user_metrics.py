@@ -33,28 +33,32 @@ def get_init_health(user: DriftUser):
         )
 
 
-def comb_asset_liab(a_l_tup):
-    return a_l_tup[0] - a_l_tup[1]
+def combine_asset_liability(asset_liability_tuple):
+    return asset_liability_tuple[0] - asset_liability_tuple[1]
 
 
-def get_collateral_composition(x: DriftUser, margin_category, n):
-    net_v = {
-        i: comb_asset_liab(
-            x.get_spot_market_asset_and_liability_value(i, margin_category)
+def get_collateral_composition(user: DriftUser, margin_category, num_markets: int):
+    spot_market_net_values = {
+        market_index: combine_asset_liability(
+            user.get_spot_market_asset_and_liability_value(
+                market_index, margin_category
+            )
         )
         / QUOTE_PRECISION
-        for i in range(n)
+        for market_index in range(num_markets)
     }
-    return net_v
+    return spot_market_net_values
 
 
-def get_perp_liab_composition(x: DriftUser, margin_category, n):
-    net_p = {
-        i: x.get_perp_market_liability(i, margin_category, signed=True)
+def get_perp_liab_composition(user: DriftUser, margin_category, num_markets: int):
+    perp_net_liabilities = {
+        market_index: user.get_perp_market_liability(
+            market_index, margin_category, signed=True
+        )
         / QUOTE_PRECISION
-        for i in range(n)
+        for market_index in range(num_markets)
     }
-    return net_p
+    return perp_net_liabilities
 
 
 @functools.cache

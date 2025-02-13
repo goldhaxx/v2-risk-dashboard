@@ -1,18 +1,43 @@
 # Drift v2 Risk Dashboard
 
+## Setup
 
-Quick Start:
-1. Copy .env.example to .env and set RPC_URL
-2. Create new venv `python -m venv .venv`
-3. Activate venv `source .venv/bin/activate`
-4. Install dependencies `pip install -r requirements.txt`
-5. `export RPC_URL= <YOUR_RPC_URL>`
-6. In one terminal, run the backend with `gunicorn backend.app:app -c gunicorn_config.py` (this might take a while to start up)
-7. In another terminal, run the frontend with `streamlit run src/main.py`
+First, make an env, activate it and pip install the dependencies:
 
-Current Metrics:
-1. Largest perp positions
-2. Largest spot borrows
-3. Account health distribution
-4. Most levered perp positions > $1m notional
-5. Most levered spot borrows > $750k notional
+```bash
+pip install -r requirements.txt
+```
+
+You can run locally in multiple terminals like so:
+
+```bash
+# Start the backend
+gunicorn backend.app:app -c gunicorn_config.py
+```
+
+In a different terminal, run the frontend with:
+
+```bash
+streamlit run src/main.py
+```
+
+Two endpoints, `asset liabilities` and `price shock` are CPU heavy and so are generated in a separate process
+(instead of on request) and cached, the backend will serve these cached files.
+
+In a different terminal, you can generate the cache files with:
+
+```bash
+./gen.sh
+```
+
+Instead of all the above you can also run it in docker with:
+
+```bash
+docker compose up --build
+```
+
+which will start a process to generate the cache files and then start the backend and frontend.
+
+## Deployment
+
+Pushing should automatically build the docker images and deploy to our k8s cluster.
