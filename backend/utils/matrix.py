@@ -53,10 +53,18 @@ async def get_matrix(vat: Vat, mode: int = 0, perp_market_index: int = 0):
         spot_asset = row["spot_asset"]
 
         for market_id, value in row["net_v"].items():
-            if value <= 0:
+            if value < 0:
+                # print(f"value: {value}, type: {type(value)}")
+                pass
+
+            if value == 0:
                 continue
 
             base_name = f"spot_{market_id}"
+
+            if row["spot_asset"] == 0:
+                continue
+
             metrics = {
                 f"{base_name}_all_assets": value,
                 f"{base_name}_all": value
@@ -67,15 +75,13 @@ async def get_matrix(vat: Vat, mode: int = 0, perp_market_index: int = 0):
             }
 
             net_perp = float(row["net_p"][perp_market_index])
-            print(f"net_perp value: {net_perp}, type: {type(net_perp)}")
+            # print(f"net_perp value: {net_perp}")
 
             if net_perp > 0:
-                print("Net perp above 0")
                 metrics[f"{base_name}_perp_{perp_market_index}_long"] = (
                     value / spot_asset * net_perp
                 )
             if net_perp < 0:
-                print("Net perp below 0")
                 metrics[f"{base_name}_perp_{perp_market_index}_short"] = (
                     value / spot_asset * net_perp
                 )
