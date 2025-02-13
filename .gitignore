@@ -36,3 +36,5 @@ ucache
 
 **/*.meta
 **/package-lock.json
+
+supervisord.pid
