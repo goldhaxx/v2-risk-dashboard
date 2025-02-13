@@ -1,13 +1,13 @@
 import pandas as pd
 import streamlit as st
 
-from lib.api import api
+from lib.api import fetch_api_data
 
 
 def pnl_page():
     st.title("Top PnL by User (All Time)")
     try:
-        pnl_data = api("pnl", "top_pnl", as_json=True)
+        pnl_data = fetch_api_data("pnl", "top_pnl", as_json=True)
     except Exception as e:
         st.error(f"Error fetching PnL data: {e}")
         return
@@ -34,7 +34,6 @@ def pnl_page():
             "realized_pnl": st.column_config.NumberColumn("All Time Realized PnL"),
             "unrealized_pnl": st.column_config.NumberColumn("Unrealized PnL"),
             "total_pnl": st.column_config.NumberColumn("Total PnL"),
-            # "collateral": st.column_config.NumberColumn("Total Collateral"),
         },
         hide_index=True,
     )

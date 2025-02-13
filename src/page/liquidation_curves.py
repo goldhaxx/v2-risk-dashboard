@@ -5,8 +5,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from driftpy.constants.perp_markets import mainnet_perp_market_configs
 
-from lib.api import api
-from utils import fetch_result_with_retry
+from lib.api import fetch_api_data
 
 
 def plot_liquidation_curves(liquidation_data):
@@ -125,8 +124,11 @@ def liquidation_curves_page():
 
     liquidation_data = None
     try:
-        liquidation_data = fetch_result_with_retry(
-            api, "liquidation", "liquidation-curve", params=params, as_json=True
+        liquidation_data = fetch_api_data(
+            "liquidation",
+            "liquidation-curve",
+            params=params,
+            retry=True,
         )
     except Exception as e:
         st.write(e)

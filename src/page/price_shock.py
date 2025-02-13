@@ -4,7 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-from lib.api import api2
+from lib.api import fetch_cached_data
 from utils import get_current_slot
 
 
@@ -112,7 +112,7 @@ def price_shock_cached_page():
     oracle_distort = 0.05
     n_scenarios = 5
     try:
-        result = api2(
+        result = fetch_cached_data(
             "price-shock/usermap",
             _params={
                 "asset_group": asset_group,

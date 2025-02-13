@@ -1,15 +1,19 @@
 import plotly.express as px
 import streamlit as st
 
-from lib.api import api2
+from lib.api import fetch_cached_data
 
 
 def health_cached_page():
-    health_distribution = api2("health/health_distribution")
-    largest_perp_positions = api2("health/largest_perp_positions")
-    most_levered_positions = api2("health/most_levered_perp_positions_above_1m")
-    largest_spot_borrows = api2("health/largest_spot_borrows")
-    most_levered_borrows = api2("health/most_levered_spot_borrows_above_1m")
+    health_distribution = fetch_cached_data("health/health_distribution")
+    largest_perp_positions = fetch_cached_data("health/largest_perp_positions")
+    most_levered_positions = fetch_cached_data(
+        "health/most_levered_perp_positions_above_1m"
+    )
+    largest_spot_borrows = fetch_cached_data("health/largest_spot_borrows")
+    most_levered_borrows = fetch_cached_data(
+        "health/most_levered_spot_borrows_above_1m"
+    )
 
     print(health_distribution)
 

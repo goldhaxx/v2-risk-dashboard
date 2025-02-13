@@ -76,12 +76,7 @@ if __name__ == "__main__":
             title="Deposits",
             icon="💰",
         ),
-        st.Page(
-            needs_backend(pnl_page),
-            url_path="pnl",
-            title="PnL",
-            icon="💰",
-        ),
+        st.Page(needs_backend(pnl_page), url_path="pnl", title="PnL", icon="💹"),
     ]
 
     if os.getenv("DEV"):

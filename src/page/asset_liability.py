@@ -3,7 +3,7 @@ import streamlit as st
 from driftpy.constants.perp_markets import mainnet_perp_market_configs
 from driftpy.constants.spot_markets import mainnet_spot_market_configs
 
-from lib.api import api2
+from lib.api import fetch_cached_data
 from utils import get_current_slot
 
 options = [0, 1, 2, 3]
@@ -82,7 +82,7 @@ def asset_liab_matrix_cached_page():
     )
     st.query_params.update({"perp_market_index": str(perp_market_index)})
 
-    result = api2(
+    result = fetch_cached_data(
         "asset-liability/matrix",
         _params={"mode": mode, "perp_market_index": perp_market_index},
         key=f"asset-liability/matrix_{mode}_{perp_market_index}",

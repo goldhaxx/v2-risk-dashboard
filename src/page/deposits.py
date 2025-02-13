@@ -2,8 +2,7 @@ import pandas as pd
 import streamlit as st
 from driftpy.constants.spot_markets import mainnet_spot_market_configs
 
-from lib.api import api
-from utils import fetch_result_with_retry
+from lib.api import fetch_api_data
 
 
 def format_authority(authority: str) -> str:
@@ -28,12 +27,11 @@ def deposits_page():
         )
         st.query_params.update({"market_index": str(market_index)})
 
-    result = fetch_result_with_retry(
-        api,
+    result = fetch_api_data(
         "deposits",
         "deposits",
-        as_json=True,
         params={"market_index": market_index},
+        retry=True,
     )
     if result is None:
         st.error("No deposits found")

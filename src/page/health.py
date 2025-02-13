@@ -1,27 +1,39 @@
+import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from lib.api import api
-from utils import fetch_result_with_retry
+from lib.api import fetch_api_data
 
 
 def health_page():
-    health_distribution = fetch_result_with_retry(api, "health", "health_distribution")
-    largest_perp_positions = fetch_result_with_retry(
-        api, "health", "largest_perp_positions"
+    health_distribution = fetch_api_data(
+        "health",
+        "health_distribution",
+        retry=True,
     )
-    most_levered_positions = fetch_result_with_retry(
-        api, "health", "most_levered_perp_positions_above_1m"
+    largest_perp_positions = fetch_api_data(
+        "health",
+        "largest_perp_positions",
+        retry=True,
     )
-    largest_spot_borrows = fetch_result_with_retry(
-        api, "health", "largest_spot_borrows"
+    most_levered_positions = fetch_api_data(
+        "health",
+        "most_levered_perp_positions_above_1m",
+        retry=True,
     )
-    most_levered_borrows = fetch_result_with_retry(
-        api, "health", "most_levered_spot_borrows_above_1m"
+    largest_spot_borrows = fetch_api_data(
+        "health",
+        "largest_spot_borrows",
+        retry=True,
+    )
+    most_levered_borrows = fetch_api_data(
+        "health",
+        "most_levered_spot_borrows_above_1m",
+        retry=True,
     )
 
     fig = px.bar(
-        health_distribution,
+        pd.DataFrame(health_distribution),
         x="Health Range",
         y="Counts",
         title="Health Distribution",
@@ -40,12 +52,12 @@ def health_page():
 
     with perp_col:
         st.markdown("### **Largest perp positions:**")
-        st.dataframe(largest_perp_positions, hide_index=True)
+        st.dataframe(pd.DataFrame(largest_perp_positions), hide_index=True)
         st.markdown("### **Most levered perp positions > $1m:**")
-        st.dataframe(most_levered_positions, hide_index=True)
+        st.dataframe(pd.DataFrame(most_levered_positions), hide_index=True)
 
     with spot_col:
         st.markdown("### **Largest spot borrows:**")
-        st.dataframe(largest_spot_borrows, hide_index=True)
+        st.dataframe(pd.DataFrame(largest_spot_borrows), hide_index=True)
         st.markdown("### **Most levered spot borrows > $750k:**")
-        st.dataframe(most_levered_borrows, hide_index=True)
+        st.dataframe(pd.DataFrame(most_levered_borrows), hide_index=True)

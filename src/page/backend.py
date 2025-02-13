@@ -1,11 +1,11 @@
 import streamlit as st
 
-from lib.api import api
+from lib.api import fetch_api_data
 
 
 def backend_page():
     if st.button("Load Pickle"):
-        result = api("snapshot", "pickle", as_json=True)
+        result = fetch_api_data("snapshot", "pickle", retry=True)
         st.write(result)
 
     st.write(

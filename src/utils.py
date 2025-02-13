@@ -1,5 +1,4 @@
 import os
-import time
 from typing import Optional
 
 import requests
@@ -94,16 +93,6 @@ async def load_vat(dc: DriftClient, pickle_map: dict[str, str]) -> Vat:
     )
 
     return vat
-
-
-def fetch_result_with_retry(func, *args, **kwargs):
-    for _ in range(10):
-        result = func(*args, **kwargs)
-        if not ("result" in result and result["result"] == "miss"):
-            return result
-        time.sleep(0.5)
-    print(f"Fetching result with retry for {func.__name__}{args} did not succeed")
-    return None
 
 
 def get_current_slot():

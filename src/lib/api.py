@@ -1,62 +1,78 @@
 import os
+import time
 from typing import Optional
 
-import pandas as pd
 import requests
 import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv()
 
-BASE_URL = os.environ["BACKEND_URL"]
-R2_PREFIX = "https://pub" + "-7dc8852b9fd5407a92614093e1f73280.r" + "2.dev"
+BASE_URL = os.getenv("BACKEND_URL")
+STORAGE_PREFIX = os.getenv("STORAGE_PREFIX")
 
 
-def api(
+def fetch_api_data(
     section: str,
     path: str,
-    as_json: bool = False,
     params: Optional[dict] = None,
-):
+    retry: bool = False,
+) -> dict:
     """
-    Fetches data from the backend API. To find the corresponding
-    path, look at the `backend/api/` directory. It should be setup
-    so that the `section` is the name of the file, the `path` is the
-    function inside the file.
+    Makes direct API calls to the backend service with optional retry logic for "miss" results.
 
     Args:
-        section (str): The section of the API to fetch from.
-        path (str): The path of the API to fetch from.
-        path_extra (Optional[str]): An optional extra path to append to the path.
-        as_json (bool): Whether to return the response as JSON.
+        section (str): API section (maps to filename in backend/api/)
+        path (str): API endpoint (maps to function name)
+        params (Optional[dict]): Query parameters to include in request
+        retry (bool): Whether to retry on "miss" results up to 10 times with 0.5s delay
 
     Returns:
-        The response from the API.
+        dict: JSON response data
     """
-    if params:
-        response = requests.get(f"{BASE_URL}/api/{section}/{path}", params=params)
+    if not retry:
+        if params:
+            response = requests.get(f"{BASE_URL}/api/{section}/{path}", params=params)
+        else:
+            response = requests.get(f"{BASE_URL}/api/{section}/{path}")
     else:
-        response = requests.get(f"{BASE_URL}/api/{section}/{path}")
+        for _ in range(10):
+            if params:
+                response = requests.get(
+                    f"{BASE_URL}/api/{section}/{path}", params=params
+                )
+            else:
+                response = requests.get(f"{BASE_URL}/api/{section}/{path}")
 
-    if as_json:
-        return response.json()
-
-    try:
-        return pd.DataFrame(response.json())
-    except ValueError:
-        return response.json()
+            result = response.json()
+            if not ("result" in result and result["result"] == "miss"):
+                break
+            time.sleep(0.5)
+        else:
+            print(f"Fetching {section}/{path} did not succeed after 10 retries")
+            return None
+    return response.json()
 
 
 @st.cache_data(ttl=1000)
-def api2(url: str, _params: Optional[dict] = None, key: str = "") -> dict:
+def fetch_cached_data(url: str, _params: Optional[dict] = None, key: str = "") -> dict:
     """
-    Fetch data from storage using the simplified naming scheme.
-    Example: /api/health/health_distribution -> GET_api_health_health_distribution.json
-    Example with params: /api/price-shock/usermap?asset_group=ignore+stables&oracle_distortion=0.05
-        -> GET_api_price-shock_usermap__asset_group-ignore+stables_oracle_distortion-0.05.json
-    """
-    print("===> SERVING CACHE")
+    Fetches cached data from storage with Streamlit caching. Constructs cache keys
+    from the URL and parameters, supporting both local and remote storage.
 
+    Example cache keys:
+    - Simple: /api/health/distribution -> GET_api_health_distribution.json
+    - With params: /api/shock/map?group=stable&dist=0.05
+                  -> GET_api_shock_map__group-stable_dist-0.05.json
+
+    Args:
+        url (str): API endpoint path
+        _params (Optional[dict]): Query parameters for the request
+        key (str): Additional cache key modifier (unused)
+
+    Returns:
+        dict: Cached response content
+    """
     cache_key = f"GET/api/{url}".replace("/", "_")
 
     if _params:
@@ -69,15 +85,16 @@ def api2(url: str, _params: Optional[dict] = None, key: str = "") -> dict:
         query_str = "_".join(query_parts)
         cache_key = f"{cache_key}__{query_str}"
 
-    use_local = os.environ.get("USE_LOCAL_CACHE", "false").lower() == "true"
-    r2_url = f"{R2_PREFIX}/{cache_key}.json"
-    if use_local:
-        r2_url = f"{BASE_URL}/api/ucache/{cache_key}.json"
+    use_storage = os.getenv("USE_STORAGE", "false").lower() == "true"
 
-    print(f"Fetching from: {r2_url}")
-    response = requests.get(r2_url)
+    if STORAGE_PREFIX and use_storage:
+        storage_url = f"{STORAGE_PREFIX}/{cache_key}.json"
+    else:
+        storage_url = f"{BASE_URL}/api/ucache/{cache_key}.json"
+
+    response = requests.get(storage_url)
     if response.status_code != 200:
-        raise Exception(f"Failed to fetch from R2: {response.status_code}")
+        raise Exception(f"Failed to fetch from storage: {response.status_code}")
 
     response_data = response.json()
     return response_data["content"]

@@ -7,7 +7,7 @@ from typing import Callable
 
 import streamlit as st
 
-from lib.api import api
+from lib.api import fetch_api_data
 
 RPC_STATE_KEY = "rpc_url"
 NETWORK_STATE_KEY = "network"
@@ -33,9 +33,10 @@ def needs_backend(page_callable: Callable):
 
     def page_with_guard():
         try:
-            api("metadata", "", as_json=True)
-        except Exception:
-            st.error("Sorry, unable to reach backend")
+            fetch_api_data("metadata", "", retry=True)
+        except Exception as e:
+            print(e)
+            st.error(e)
             return
 
         page_callable()
