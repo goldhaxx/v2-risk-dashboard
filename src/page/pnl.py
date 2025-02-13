@@ -7,7 +7,7 @@ from lib.api import fetch_api_data
 def pnl_page():
     st.title("Top PnL by User (All Time)")
     try:
-        pnl_data = fetch_api_data("pnl", "top_pnl", as_json=True)
+        pnl_data = fetch_api_data("pnl", "top_pnl", retry=True)
     except Exception as e:
         st.error(f"Error fetching PnL data: {e}")
         return
