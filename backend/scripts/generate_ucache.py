@@ -15,6 +15,12 @@ from backend.state import BackendState
 
 load_dotenv()
 
+#  For profiling, uncomment the following, as well as the @profiler.profile_async() decorator
+# import functools
+# from line_profiler import LineProfiler
+# from backend.scripts.profiling_utils import AsyncProfiler, view_profiling_results
+# profiler = AsyncProfiler(output_dir="profiling_results")
+
 
 def chunk_list(lst, n):
     """Split list into n chunks"""
@@ -59,6 +65,7 @@ class PriceShockEndpoint(Endpoint):
         )
 
 
+# @profiler.profile_async()  # For profiling, uncomment the following:
 async def process_multiple_endpoints(state_pickle_path: str, endpoints: list[Endpoint]):
     """Process a single endpoint in its own process"""
     state = BackendState()
@@ -190,5 +197,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+
+# Usage example:
 # python -m backend.scripts.generate_ucache --use-snapshot asset-liability --mode 0 --perp-market-index 0
 # python -m backend.scripts.generate_ucache --use-snapshot price-shock --asset-group "ignore+stables" --oracle-distortion 0.05 --n-scenarios 5
