@@ -2,6 +2,7 @@ import asyncio
 import glob
 import hashlib
 import json
+import logging
 import os
 from typing import Callable, Dict, List
 
@@ -16,8 +17,8 @@ class CacheMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: ASGIApp, state: BackendState, cache_dir: str = "cache"):
         super().__init__(app)
         self.state = state
-        self.cache_dir = cache_dir
-        self.ucache_dir = "ucache"
+        self.cache_dir = cache_dir  # Normal cache for responses (tied to pickle path)
+        self.ucache_dir = "ucache"  # This is the generated cache folder for asset liability and price shock
         self.revalidation_locks: Dict[str, asyncio.Lock] = {}
         if not os.path.exists(self.cache_dir):
             os.makedirs(self.cache_dir)
@@ -59,7 +60,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
         )
 
     def _serve_cached_response(self, cache_file: str, cache_status: str):
-        print(f"Serving {cache_status.lower()} data")
+        logging.info(f"Serving {cache_status.lower()} data")
         with open(cache_file, "r") as f:
             response_data = json.load(f)
 
@@ -71,6 +72,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
         }
         headers["Content-Length"] = str(len(content))
         headers["X-Cache-Status"] = cache_status
+        self.cleanup_old_cache_files()
 
         return Response(
             content=content,
@@ -106,7 +108,7 @@ class CacheMiddleware(BaseHTTPMiddleware):
         cache_key: str,
         cache_file: str,
     ):
-        print(f"No data available for {request.url.path}")
+        logging.info(f"No data available for {request.url.path}")
         background_tasks = BackgroundTasks()
         background_tasks.add_task(
             self._fetch_and_cache,
@@ -160,43 +162,46 @@ class CacheMiddleware(BaseHTTPMiddleware):
                     with open(cache_file, "w") as f:
                         json.dump(response_data, f)
 
-                    ucache_key = f"{request.method}{request.url.path}"
-                    if request.url.query:
-                        safe_query = request.url.query.replace("&", "_").replace(
-                            "=", "-"
-                        )
-                        ucache_key = f"{ucache_key}__{safe_query}"
-                    ucache_key = ucache_key.replace("/", "_")
-
-                    ucache_file = os.path.join(self.ucache_dir, f"{ucache_key}.json")
-                    with open(ucache_file, "w") as f:
-                        json.dump(response_data, f)
-
-                    print(
+                    logging.info(
                         f"Cached fresh data for {request.url.path} with query {request.url.query}"
                     )
                 else:
-                    print(
+                    logging.warning(
                         f"Failed to cache data for {request.url.path}. Status code: {response.status_code}"
                     )
             except Exception as e:
-                print(f"Error in background task for {request.url.path}: {str(e)}")
+                logging.error(
+                    f"Error in background task for {request.url.path}: {str(e)}"
+                )
 
     def _generate_cache_key(self, request: BackendRequest, pickle_path: str) -> str:
         hash_input = (
             f"{pickle_path}:{request.method}:{request.url.path}:{request.url.query}"
         )
-        print("Hash input: ", hash_input)
+        logging.info("Hash input: %s", hash_input)
         return hashlib.md5(hash_input.encode()).hexdigest()
 
     def _get_previous_pickles(self, num_pickles: int = 4) -> List[str]:
-        print(f"Attempting to get previous {num_pickles} pickles")
+        logging.info(f"Attempting to get previous {num_pickles} pickles")
         _pickle_paths = glob.glob(f"{self.state.current_pickle_path}/../*")
         pickle_paths = sorted(
             [os.path.realpath(dir) for dir in _pickle_paths], reverse=True
         )
-        print("Pickle paths: ", pickle_paths)
+        logging.info("Pickle paths: %s", pickle_paths)
 
         previous_pickles = pickle_paths[1 : num_pickles + 1]
-        print(f"Previous {len(previous_pickles)} pickles: ", previous_pickles)
+        logging.info(f"Previous {len(previous_pickles)} pickles: %s", previous_pickles)
         return previous_pickles
+
+    def cleanup_old_cache_files(self, keep_newest: int = 30):
+        """Delete all but the newest N cache files"""
+        for cache_dir in [self.cache_dir, self.ucache_dir]:
+            if not os.path.exists(cache_dir):
+                continue
+            files = glob.glob(f"{cache_dir}/*.json")
+            files.sort(key=os.path.getmtime, reverse=True)
+            for old_file in files[keep_newest:]:
+                try:
+                    os.remove(old_file)
+                except Exception as e:
+                    logging.error(f"Failed to remove {old_file}: {e}")

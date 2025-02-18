@@ -58,10 +58,10 @@ def generate_summary_data(
 
 
 def asset_liab_matrix_cached_page():
-    if "min_leverage" not in st.session_state:
-        st.session_state.min_leverage = 0.0
     if "only_high_leverage_mode_users" not in st.session_state:
         st.session_state.only_high_leverage_mode_users = False
+    if "min_leverage" not in st.session_state:
+        st.session_state.min_leverage = 0.0
 
     params = st.query_params
     mode = int(params.get("mode", 0))

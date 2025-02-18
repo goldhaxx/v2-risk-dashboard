@@ -1,5 +1,8 @@
 import glob
+import logging
 import os
+import random
+import time
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
@@ -19,9 +22,16 @@ from backend.api import (
 from backend.middleware.cache_middleware import CacheMiddleware
 from backend.middleware.readiness import ReadinessMiddleware
 from backend.state import BackendState
+from backend.tasks.snapshot_watcher import SnapshotWatcher
 
 load_dotenv()
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
 state = BackendState()
+snapshot_watcher = SnapshotWatcher(state, check_interval=60)  # Check every minute
 
 
 @asynccontextmanager
@@ -32,25 +42,25 @@ async def lifespan(app: FastAPI):
     global state
     state.initialize(url)
 
-    print("Checking if cached vat exists")
+    logger.info("Checking if cached vat exists")
     cached_vat_path = sorted(glob.glob("pickles/*"))
     if len(cached_vat_path) > 0:
-        print("Loading cached vat")
+        logger.info("Loading cached vat")
         await state.load_pickle_snapshot(cached_vat_path[-1])
     else:
-        print("No cached vat found, bootstrapping")
+        logger.info("No cached vat found, bootstrapping")
         await state.bootstrap()
         await state.take_pickle_snapshot()
     state.ready = True
-    import random
-    import time
 
     time.sleep(random.randint(1, 10))
-    print("Starting app")
+
+    await snapshot_watcher.start()
+    logger.info("Starting app")
     yield
 
-    # Cleanup
     state.ready = False
+    await snapshot_watcher.stop()
     await state.dc.unsubscribe()
     await state.connection.close()
 
