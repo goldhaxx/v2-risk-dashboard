@@ -1,3 +1,4 @@
+import driftpy
 import streamlit as st
 from streamlit.navigation.page import StreamlitPage
 
@@ -29,8 +30,17 @@ def welcome_page():
         StreamlitPage("page/liquidation_curves.py", url_path="liquidation-curves"),
         label="💧 **Liquidations** - Explore liquidation curves and potential risks",
     )
+    st.page_link(
+        StreamlitPage("page/deposits.py", url_path="deposits"),
+        label="💰 **Deposits** - Track total deposits across all the protocol",
+    )
+    st.page_link(
+        StreamlitPage("page/pnl.py", url_path="pnl"),
+        label="💸 **PnL** - Track top trader PnLs",
+    )
 
     st.markdown("---")
     st.markdown(
         "For more information about Drift Protocol, visit [drift.trade](https://drift.trade)"
     )
+    st.text(f"v{driftpy.__version__}")

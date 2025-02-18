@@ -22,6 +22,7 @@ def pnl_page():
     )
     st.dataframe(
         df,
+        height=650,
         column_config={
             "authority": st.column_config.TextColumn(
                 "Authority",
