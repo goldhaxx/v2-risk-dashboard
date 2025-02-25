@@ -83,10 +83,12 @@ def get_user_metrics_for_asset_liability(
     Returns a dictionary of the user's health, leverage, and other metrics.
     """
 
-    asset_value = x.get_spot_market_asset_value(None, margin_category) / QUOTE_PRECISION
-    liability_value = (
-        x.get_spot_market_liability_value(None, margin_category) / QUOTE_PRECISION
+    asset_value, liability_value = x.get_spot_market_asset_and_liability_value(
+        None, margin_category
     )
+    asset_value = asset_value / QUOTE_PRECISION
+    liability_value = liability_value / QUOTE_PRECISION
+
     perp_liability = (
         x.get_total_perp_position_liability(margin_category) / QUOTE_PRECISION
     )
@@ -221,21 +223,36 @@ def calculate_leverages_for_price_shock(
     ]
 
 
-def get_user_leverages_for_asset_liability(user_map: UserMap):
+def get_user_metrics_none(user_map: UserMap):
     user_keys = list(user_map.user_map.keys())
     user_values = list(user_map.values())
+    metrics_none = calculate_leverages_for_asset_liability(user_values, None)
+    return {
+        "metrics_none": metrics_none,
+        "user_keys": user_keys,
+    }
 
-    leverages_none = calculate_leverages_for_asset_liability(user_values, None)
-    leverages_initial = calculate_leverages_for_asset_liability(
+
+def get_user_metrics_initial(user_map: UserMap):
+    user_keys = list(user_map.user_map.keys())
+    user_values = list(user_map.values())
+    metrics_initial = calculate_leverages_for_asset_liability(
         user_values, MarginCategory.INITIAL
     )
-    leverages_maintenance = calculate_leverages_for_asset_liability(
+    return {
+        "metrics_initial": metrics_initial,
+        "user_keys": user_keys,
+    }
+
+
+def get_user_metrics_maintenance(user_map: UserMap):
+    user_keys = list(user_map.user_map.keys())
+    user_values = list(user_map.values())
+    metrics_maintenance = calculate_leverages_for_asset_liability(
         user_values, MarginCategory.MAINTENANCE
     )
     return {
-        "leverages_none": leverages_none,
-        "leverages_initial": leverages_initial,
-        "leverages_maintenance": leverages_maintenance,
+        "metrics_maintenance": metrics_maintenance,
         "user_keys": user_keys,
     }
 

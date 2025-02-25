@@ -2,7 +2,11 @@ import pandas as pd
 from driftpy.constants.spot_markets import mainnet_spot_market_configs
 from driftpy.pickle.vat import Vat
 
-from backend.utils.user_metrics import get_user_leverages_for_asset_liability
+from backend.utils.user_metrics import (
+    get_user_metrics_initial,
+    get_user_metrics_maintenance,
+    get_user_metrics_none,
+)
 
 
 def calculate_effective_leverage(assets: float, liabilities: float) -> float:
@@ -19,21 +23,28 @@ def format_metric(
 async def get_matrix(vat: Vat, mode: int = 0, perp_market_index: int = 0):
     NUMBER_OF_SPOT = len(mainnet_spot_market_configs)
 
-    res = get_user_leverages_for_asset_liability(vat.users)
-    leverage_data = {
-        0: res["leverages_none"],
-        1: res["leverages_none"],
-        2: [x for x in res["leverages_initial"] if int(x["health"]) <= 10],
-        3: [x for x in res["leverages_maintenance"] if int(x["health"]) <= 10],
-    }
+    # The modes are:
+    # 0: None
+    # 1: liq within 50% of oracle
+    # 2: maint. health < 10%
+    # 3: init. health < 10%
 
-    user_keys = (
-        [x["user_key"] for x in leverage_data[mode]]
-        if mode in [2, 3]
-        else res["user_keys"]
-    )
+    if mode == 0 or mode == 1:
+        res = get_user_metrics_none(vat.users)
+        metrics_data = res["metrics_none"]
+        user_keys = res["user_keys"]
+    elif mode == 2:
+        res = get_user_metrics_initial(vat.users)
+        metrics_data = [x for x in res["metrics_initial"] if int(x["health"]) <= 10]
+        user_keys = [x["user_key"] for x in metrics_data]
+    elif mode == 3:
+        res = get_user_metrics_maintenance(vat.users)
+        metrics_data = [x for x in res["metrics_maintenance"] if int(x["health"]) <= 10]
+        user_keys = [x["user_key"] for x in metrics_data]
+    else:
+        raise ValueError(f"Invalid mode: {mode}")
 
-    df = pd.DataFrame(leverage_data[mode], index=user_keys)
+    df = pd.DataFrame(metrics_data, index=user_keys)
 
     new_columns = {}
     for i in range(NUMBER_OF_SPOT):

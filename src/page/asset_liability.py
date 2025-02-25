@@ -35,7 +35,7 @@ def generate_summary_data(
         assets = df[f"{prefix}_all_assets"].sum()
         liabilities = df[f"{prefix}_all"].sum()
 
-        summary_data[f"spot{i}"] = {
+        summary_data[f"spot{i} ({mainnet_spot_market_configs[i].symbol})"] = {
             "all_assets": assets,
             "all_liabilities": format_metric(
                 liabilities, 0 < liabilities < 1_000_000, mode, financial=True
@@ -111,7 +111,6 @@ def asset_liab_matrix_cached_page():
         "Filter by minimum leverage",
         0.0,
         110.0,
-        0.0,
         key="min_leverage",
     )
     st.write(summary_df)
@@ -134,9 +133,11 @@ def asset_liab_matrix_cached_page():
 
     for idx, tab in enumerate(tabs[1:]):
         important_cols = [x for x in filtered_df.columns if "spot_" + str(idx) in x]
-
+        filtered_df["Link"] = filtered_df["user_key"].apply(
+            lambda x: f"https://app.drift.trade/overview?userAccount={x}"
+        )
         toshow = filtered_df[
-            ["user_key", "spot_asset", "net_usd_value"] + important_cols
+            ["user_key", "Link", "spot_asset", "net_usd_value"] + important_cols
         ]
         toshow = toshow[toshow[important_cols].abs().sum(axis=1) != 0].sort_values(
             by="spot_" + str(idx) + "_all", ascending=False
@@ -144,4 +145,10 @@ def asset_liab_matrix_cached_page():
         tab.write(
             f"{len(toshow)} users with this asset to cover liabilities (with {st.session_state.min_leverage}x leverage or more)"
         )
-        tab.dataframe(toshow, hide_index=True)
+        tab.dataframe(
+            toshow,
+            hide_index=True,
+            column_config={
+                "Link": st.column_config.LinkColumn("Link", display_text="View"),
+            },
+        )

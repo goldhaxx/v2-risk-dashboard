@@ -15,12 +15,6 @@ from backend.state import BackendState
 
 load_dotenv()
 
-#  For profiling, uncomment the following, as well as the @profiler.profile_async() decorator
-# import functools
-# from line_profiler import LineProfiler
-# from backend.scripts.profiling_utils import AsyncProfiler, view_profiling_results
-# profiler = AsyncProfiler(output_dir="profiling_results")
-
 
 def chunk_list(lst, n):
     """Split list into n chunks"""
@@ -42,6 +36,8 @@ class AssetLiabilityEndpoint(Endpoint):
     perp_market_index: int
 
     def __init__(self, mode: int, perp_market_index: int):
+        self.mode = mode
+        self.perp_market_index = perp_market_index
         super().__init__(
             "asset-liability/matrix",
             {"mode": mode, "perp_market_index": perp_market_index},
@@ -55,6 +51,9 @@ class PriceShockEndpoint(Endpoint):
     n_scenarios: int
 
     def __init__(self, asset_group: str, oracle_distortion: float, n_scenarios: int):
+        self.asset_group = asset_group
+        self.oracle_distortion = oracle_distortion
+        self.n_scenarios = n_scenarios
         super().__init__(
             "price-shock/usermap",
             {
@@ -65,7 +64,6 @@ class PriceShockEndpoint(Endpoint):
         )
 
 
-# @profiler.profile_async()  # For profiling, uncomment the following:
 async def process_multiple_endpoints(state_pickle_path: str, endpoints: list[Endpoint]):
     """Process a single endpoint in its own process"""
     state = BackendState()
@@ -140,7 +138,7 @@ async def generate_ucache(endpoints: list[Endpoint]):
     """Generate ucache files by splitting endpoints across processes"""
     ucache_dir = "ucache"
 
-    print("Generating ucache")
+    print(f"Generating ucache for endpoints: {endpoints}")
     if not os.path.exists(ucache_dir):
         os.makedirs(ucache_dir)
     state_pickle_path = sorted(glob.glob("pickles/*"))[-1]
@@ -155,12 +153,10 @@ async def main():
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # Asset Liability parser
     al_parser = subparsers.add_parser("asset-liability")
     al_parser.add_argument("--mode", type=int, required=True)
     al_parser.add_argument("--perp-market-index", type=int, required=True)
 
-    # Price Shock parser
     ps_parser = subparsers.add_parser("price-shock")
     ps_parser.add_argument("--asset-group", type=str, required=True)
     ps_parser.add_argument("--oracle-distortion", type=float, required=True)
