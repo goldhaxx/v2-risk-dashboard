@@ -14,13 +14,13 @@ def calculate_effective_leverage(assets: float, liabilities: float) -> float:
 
 
 def format_metric(
-    value: float, should_highlight: bool, mode: int, financial: bool = False
+    value: float, should_highlight: bool, mode: int, financial: bool = False, 
 ) -> str:
     formatted = f"{value:,.2f}" if financial else f"{value:.2f}"
     return f"{formatted} ✅" if should_highlight and mode > 0 else formatted
 
 
-async def get_matrix(vat: Vat, mode: int = 0, perp_market_index: int = 0):
+async def get_matrix(vat: Vat, mode: int = 0, perp_market_index: int = 0, toggle_upnl: bool = True):
     NUMBER_OF_SPOT = len(mainnet_spot_market_configs)
 
     # The modes are:
@@ -64,11 +64,16 @@ async def get_matrix(vat: Vat, mode: int = 0, perp_market_index: int = 0):
         spot_asset = row["spot_asset"]
 
         for market_id, value in row["net_v"].items():
-            if value < 0:
-                # print(f"value: {value}, type: {type(value)}")
-                pass
+            if toggle_upnl:
+                value_mod = res['upnl'] + value if market_id == 0 else value # add perp upnl to usdc balance
+            else:
+                value_mod = value
 
-            if value == 0:
+            if value_mod < 0:
+                # print(f"value: {value}, type: {type(value)}")
+                continue
+
+            if value_mod == 0:
                 continue
 
             base_name = f"spot_{market_id}"
@@ -77,12 +82,12 @@ async def get_matrix(vat: Vat, mode: int = 0, perp_market_index: int = 0):
                 continue
 
             metrics = {
-                f"{base_name}_all_assets": value,
-                f"{base_name}_all": value
+                f"{base_name}_all_assets": value_mod,
+                f"{base_name}_all": value_mod
                 / spot_asset
                 * (row["perp_liability"] + row["spot_liability"]),
-                f"{base_name}_all_perp": value / spot_asset * row["perp_liability"],
-                f"{base_name}_all_spot": value / spot_asset * row["spot_liability"],
+                f"{base_name}_all_perp": value_mod / spot_asset * row["perp_liability"],
+                f"{base_name}_all_spot": value_mod / spot_asset * row["spot_liability"],
             }
 
             net_perp = float(row["net_p"][perp_market_index])
