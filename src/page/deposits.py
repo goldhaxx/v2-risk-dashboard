@@ -14,25 +14,41 @@ def deposits_page():
     params = st.query_params
     market_index = int(params.get("market_index", 0))
 
+    radio_option = st.radio(
+        "Aggregate by",
+        ["All", "By Market"],
+        index=0,
+    )
     col1, col2 = st.columns([2, 2])
 
-    with col1:
-        market_index = st.selectbox(
-            "Market index",
-            [x.market_index for x in mainnet_spot_market_configs],
-            index=[x.market_index for x in mainnet_spot_market_configs].index(
-                market_index
-            ),
-            format_func=lambda x: f"{x} ({mainnet_spot_market_configs[int(x)].symbol})",
-        )
+    if radio_option == "All":
+        market_index = 0
+    else:
+        with col2:
+            market_index = st.selectbox(
+                "Market index",
+                [x.market_index for x in mainnet_spot_market_configs],
+                index=[x.market_index for x in mainnet_spot_market_configs].index(
+                    market_index
+                ),
+                format_func=lambda x: f"{x} ({mainnet_spot_market_configs[int(x)].symbol})",
+            )
         st.query_params.update({"market_index": str(market_index)})
 
-    result = fetch_api_data(
-        "deposits",
-        "deposits",
-        params={"market_index": market_index},
-        retry=True,
-    )
+    if radio_option == "All":
+        result = fetch_api_data(
+            "deposits",
+            "deposits",
+            params={"market_index": None},
+            retry=True,
+        )
+    else:
+        result = fetch_api_data(
+            "deposits",
+            "deposits",
+            params={"market_index": market_index},
+            retry=True,
+        )
     if result is None:
         st.error("No deposits found")
         return
@@ -40,30 +56,27 @@ def deposits_page():
     df = pd.DataFrame(result["deposits"])
     total_number_of_deposited = sum([x["balance"] for x in result["deposits"]])
 
-    with col2:
+    with col1:
         min_balance = st.number_input(
             "Minimum Balance",
             min_value=0.0,
             max_value=float(df["balance"].max()),
             value=0.0,
             step=0.1,
-            format="%.4f",
         )
 
     # Filter dataframe based on minimum balance
     filtered_df = df[df["balance"] >= min_balance]
 
     st.write(f"Total deposits value: **${filtered_df['value'].sum():,.2f}**")
-    st.write(f"Number of depositors: **{len(filtered_df)}**")
+    st.write(f"Number of depositors: **{len(filtered_df):,}**")
     st.write(
-        f"Total number of deposited {mainnet_spot_market_configs[market_index].symbol}: **{total_number_of_deposited}**"
+        f"Total number of deposited {mainnet_spot_market_configs[market_index].symbol}: **{total_number_of_deposited:,.0f}**"
     )
 
-    # Create tabs for different views
-    tabs = st.tabs(["All Deposits", "By Authority"])
+    tabs = st.tabs(["By Position", "By Authority"])
 
     with tabs[0]:
-        # Add download button for all deposits
         csv = filtered_df.to_csv(index=False)
         st.download_button(
             "Download All Deposits CSV",
@@ -71,6 +84,9 @@ def deposits_page():
             "all_deposits.csv",
             "text/csv",
             key="download-all-deposits",
+        )
+        filtered_df["market_index"] = filtered_df["market_index"].map(
+            lambda x: f"{x} ({mainnet_spot_market_configs[x].symbol})"
         )
 
         st.dataframe(
@@ -85,12 +101,12 @@ def deposits_page():
                     help="User account address",
                 ),
                 "value": st.column_config.NumberColumn(
-                    "Value",
-                    format="$%.8f",
+                    "Value (USD)",
+                    step=0.01,
                 ),
                 "balance": st.column_config.NumberColumn(
-                    "Balance",
-                    format="%.8f",
+                    "Balance (USD)",
+                    step=0.01,
                 ),
             },
             hide_index=True,
@@ -123,16 +139,16 @@ def deposits_page():
                     help="Account authority",
                 ),
                 "value": st.column_config.NumberColumn(
-                    "Total Value",
-                    format="$%.2f",
+                    "Total Value (USD)",
+                    step=0.01,
                 ),
                 "balance": st.column_config.NumberColumn(
-                    "Total Balance",
-                    format="%.4f",
+                    "Total Balance (USD)",
+                    step=0.01,
                 ),
                 "num_accounts": st.column_config.NumberColumn(
                     "Number of Accounts",
-                    format="%d",
+                    step=1,
                 ),
             },
             hide_index=True,
