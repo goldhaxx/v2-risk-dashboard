@@ -121,6 +121,7 @@ def deposits_page():
         )
         grouped_df = grouped_df.rename(columns={"user_account": "num_accounts"})
         grouped_df = grouped_df.sort_values("value", ascending=False)
+        grouped_df.drop(columns=["balance"], inplace=True)
 
         csv_grouped = grouped_df.to_csv(index=False)
         st.download_button(
@@ -140,10 +141,6 @@ def deposits_page():
                 ),
                 "value": st.column_config.NumberColumn(
                     "Total Value (USD)",
-                    step=0.01,
-                ),
-                "balance": st.column_config.NumberColumn(
-                    "Total Balance (USD)",
                     step=0.01,
                 ),
                 "num_accounts": st.column_config.NumberColumn(
