@@ -49,12 +49,18 @@ def deposits_page():
             params={"market_index": market_index},
             retry=True,
         )
+
     if result is None:
         st.error("No deposits found")
         return
 
     df = pd.DataFrame(result["deposits"])
     total_number_of_deposited = sum([x["balance"] for x in result["deposits"]])
+
+    exclude_vaults = st.checkbox("Exclude Vaults", value=True)
+
+    if exclude_vaults:
+        df = df[~df["authority"].isin(result["vaults"])]
 
     with col1:
         min_balance = st.number_input(

@@ -12,4 +12,4 @@ uvicorn==0.34.0
 requests
 plotly==6.0.0
 anchorpy
-driftpy>=0.8.26
+driftpy>=0.8.29
