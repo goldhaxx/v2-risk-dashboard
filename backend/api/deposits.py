@@ -1,6 +1,7 @@
 from typing import Optional
 
 from driftpy.constants import PRICE_PRECISION, SPOT_BALANCE_PRECISION
+from driftpy.constants.vaults import get_vaults_program
 from driftpy.pickle.vat import Vat
 from driftpy.types import is_variant
 from fastapi import APIRouter
@@ -11,7 +12,7 @@ router = APIRouter()
 
 
 @router.get("/deposits")
-def get_deposits(request: BackendRequest, market_index: Optional[int] = None):
+async def get_deposits(request: BackendRequest, market_index: Optional[int] = None):
     """
     Get all deposits grouped by authority, optionally filtered by market index.
 
@@ -23,6 +24,9 @@ def get_deposits(request: BackendRequest, market_index: Optional[int] = None):
     """
     vat: Vat = request.state.backend_state.vat
     deposits = []
+    vaults_program = await get_vaults_program(request.state.backend_state.connection)
+    vaults = await vaults_program.account["Vault"].all()
+    vault_pubkeys = [str(vault.account.pubkey) for vault in vaults]
 
     for user in vat.users.values():
         for position in user.get_user_account().spot_positions:
@@ -50,6 +54,7 @@ def get_deposits(request: BackendRequest, market_index: Optional[int] = None):
     deposits.sort(key=lambda x: x["value"], reverse=True)
     return {
         "deposits": deposits,
+        "vaults": vault_pubkeys,
         "total_value": sum(d["value"] for d in deposits),
         "total_deposits": len(deposits),
     }
