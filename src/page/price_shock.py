@@ -39,7 +39,7 @@ def generate_oracle_moves(num_scenarios, oracle_distort):
     )
 
 
-def price_shock_plot(user_leverages, oracle_distort: float):
+def get_df_plot(user_leverages, oracle_distort: float):
     levs = user_leverages
     dfs = (
         create_dataframes(levs["leverages_down"])
@@ -53,7 +53,6 @@ def price_shock_plot(user_leverages, oracle_distort: float):
     num_scenarios = len(levs["leverages_down"])
     oracle_moves = generate_oracle_moves(num_scenarios, oracle_distort)
 
-    # Create and sort the DataFrame BEFORE plotting
     df_plot = pd.DataFrame(
         {
             "Oracle Move (%)": oracle_moves,
@@ -62,15 +61,19 @@ def price_shock_plot(user_leverages, oracle_distort: float):
         }
     )
 
-    # Sort by Oracle Move to ensure correct line connection order
     df_plot = df_plot.sort_values("Oracle Move (%)")
 
-    # Calculate Perpetual Bankruptcy AFTER sorting
     df_plot["Perpetual Bankruptcy ($)"] = (
         df_plot["Total Bankruptcy ($)"] - df_plot["Spot Bankruptcy ($)"]
     )
 
-    # Create the figure with sorted data
+    return df_plot
+
+
+@st.cache_data(ttl=20)
+def price_shock_plot(user_leverages, oracle_distort: float):
+    df_plot = get_df_plot(user_leverages, oracle_distort)
+
     fig = go.Figure()
     for column in [
         "Total Bankruptcy ($)",
@@ -101,7 +104,6 @@ def price_shock_cached_page():
     params = st.query_params
     asset_group = params.get("asset_group", "ignore stables")
 
-    oracle_distort = 0.05
     asset_group = st.selectbox(
         "Asset Group",
         ["ignore stables", "jlp only"],
@@ -109,8 +111,18 @@ def price_shock_cached_page():
     )
     st.query_params.update({"asset_group": asset_group})  # type: ignore
 
-    oracle_distort = 0.05
-    n_scenarios = 5
+    n_scenarios = [5, 10]
+
+    # Create a list with the second option labeled as experimental
+    scenario_options = [5, "10 (experimental)"]
+    radio = st.radio("Scenarios", scenario_options, index=0, key="n_scenarios")
+    # Convert back to integer if the experimental option is selected
+    n_scenarios = 10 if radio == "10 (experimental)" else radio
+
+    if n_scenarios == 5:
+        oracle_distort = 0.05
+    else:
+        oracle_distort = 0.1
     try:
         result = fetch_cached_data(
             "price-shock/usermap",
@@ -138,8 +150,38 @@ def price_shock_cached_page():
     st.info(
         f"This data is for slot {result['slot']}, which is now {int(current_slot) - int(result['slot'])} slots old"
     )
-    fig = price_shock_plot(result, 0.05)
+    fig = price_shock_plot(result, oracle_distort)
     st.plotly_chart(fig)
+
+    df_summary = get_df_plot(result, oracle_distort)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        df_liquidations = df_summary.drop(
+            columns=["Spot Bankruptcy ($)", "Total Bankruptcy ($)"]
+        )
+        df_liquidations.rename(
+            columns={
+                "Perpetual Bankruptcy ($)": "Liquidations ($)",
+                "Oracle Move (%)": "Oracle Move (%)",
+            },
+            inplace=True,
+        )
+        st.dataframe(df_liquidations)
+
+    with col2:
+        df_bad_debts = df_summary.drop(
+            columns=["Perpetual Bankruptcy ($)", "Total Bankruptcy ($)"]
+        )
+        df_bad_debts.rename(
+            columns={
+                "Spot Bankruptcy ($)": "Bad Debts ($)",
+                "Oracle Move (%)": "Oracle Move (%)",
+            },
+            inplace=True,
+        )
+        st.dataframe(df_bad_debts)
+
     oracle_down_max = pd.DataFrame(result["leverages_down"][-1])
     with st.expander(
         str("oracle down max bankrupt count=")
