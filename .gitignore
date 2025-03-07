@@ -8,6 +8,8 @@ cache
 ignore
 ucache
 
+.DS_Store
+
 # Package manager caches
 **/node_modules/
 **/.npm/
