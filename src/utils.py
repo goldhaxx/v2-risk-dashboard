@@ -17,6 +17,8 @@ from driftpy.user_map.user_map_config import (
 )
 from driftpy.user_map.userstats_map import UserStatsMap
 
+from dotenv import load_dotenv
+load_dotenv()
 
 def to_financial(num):
     num_str = str(num)
@@ -106,6 +108,6 @@ def get_current_slot():
         "content-type": "application/json",
     }
     response = requests.post(
-        "https://api.mainnet-beta.solana.com", json=payload, headers=headers
+        os.getenv("RPC_URL"), json=payload, headers=headers
     )
     return response.json()["result"]
