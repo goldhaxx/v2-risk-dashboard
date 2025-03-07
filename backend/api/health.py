@@ -16,6 +16,9 @@ def to_financial(num: float):
     Helper function to format a number to a financial format.
     """
     num_str = str(num)
+    if "e" in num_str.lower():
+        return round(num, 2)
+
     decimal_pos = num_str.find(".")
     if decimal_pos != -1:
         return float(num_str[: decimal_pos + 3])
