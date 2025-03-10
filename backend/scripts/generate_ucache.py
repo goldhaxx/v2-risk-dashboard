@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from backend.api.asset_liability import _get_asset_liability_matrix
 from backend.api.price_shock import _get_price_shock
 from backend.state import BackendState
+from shared.types import PriceShockAssetGroup
 
 load_dotenv()
 
@@ -46,11 +47,16 @@ class AssetLiabilityEndpoint(Endpoint):
 
 @dataclass
 class PriceShockEndpoint(Endpoint):
-    asset_group: str
+    asset_group: PriceShockAssetGroup
     oracle_distortion: float
     n_scenarios: int
 
-    def __init__(self, asset_group: str, oracle_distortion: float, n_scenarios: int):
+    def __init__(
+        self,
+        asset_group: PriceShockAssetGroup,
+        oracle_distortion: float,
+        n_scenarios: int,
+    ):
         self.asset_group = asset_group
         self.oracle_distortion = oracle_distortion
         self.n_scenarios = n_scenarios
@@ -125,7 +131,7 @@ async def process_multiple_endpoints(state_pickle_path: str, endpoints: list[End
                 }
 
                 with open(ucache_file, "w") as f:
-                    json.dump(response_data, f)
+                    json.dump(response_data, f, indent=2)
                 return f"Generated cache for {endpoint}"
 
         await run_request()

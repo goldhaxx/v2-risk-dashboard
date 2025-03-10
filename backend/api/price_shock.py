@@ -1,11 +1,9 @@
-from typing import Optional
-
 from driftpy.drift_client import DriftClient
 from driftpy.pickle.vat import Vat
 from fastapi import APIRouter
 
 from backend.state import BackendRequest
-from backend.utils.user_metrics import get_user_leverages_for_price_shock
+from backend.utils.price_shock import PriceShockAssetGroup, get_price_shock_df
 
 router = APIRouter()
 
@@ -15,16 +13,19 @@ async def _get_price_shock(
     vat: Vat,
     drift_client: DriftClient,
     oracle_distortion: float = 0.1,
-    asset_group: Optional[str] = None,
+    asset_group: str = PriceShockAssetGroup.IGNORE_STABLES.value,
     n_scenarios: int = 5,
 ) -> dict:
-    return get_user_leverages_for_price_shock(
-        slot,
-        drift_client,
-        vat.users,
-        oracle_distortion,
-        asset_group,
-        n_scenarios,
+    asset_group = asset_group.replace("+", " ")
+    price_shock_asset_group = PriceShockAssetGroup(asset_group)
+
+    return get_price_shock_df(
+        slot=slot,
+        drift_client=drift_client,
+        vat=vat,
+        oracle_distortion=oracle_distortion,
+        asset_group=price_shock_asset_group,
+        n_scenarios=n_scenarios,
     )
 
 
@@ -32,7 +33,7 @@ async def _get_price_shock(
 async def get_price_shock(
     request: BackendRequest,
     oracle_distortion: float = 0.1,
-    asset_group: Optional[str] = None,
+    asset_group: str = PriceShockAssetGroup.IGNORE_STABLES.value,
     n_scenarios: int = 5,
 ):
     return await _get_price_shock(
