@@ -3,7 +3,6 @@ import time
 from typing import Optional
 
 import requests
-import streamlit as st
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,6 +16,7 @@ def fetch_api_data(
     path: str,
     params: Optional[dict] = None,
     retry: bool = False,
+    max_wait_time: int = 45,
 ) -> dict:
     """
     Makes direct API calls to the backend service with optional retry logic for "miss" results.
@@ -25,7 +25,8 @@ def fetch_api_data(
         section (str): API section (maps to filename in backend/api/)
         path (str): API endpoint (maps to function name)
         params (Optional[dict]): Query parameters to include in request
-        retry (bool): Whether to retry on "miss" results up to 10 times with 0.5s delay
+        retry (bool): Whether to retry on "miss" results with exponential backoff
+        max_wait_time (int): Maximum total wait time in seconds before giving up
 
     Returns:
         dict: JSON response data
@@ -36,7 +37,11 @@ def fetch_api_data(
         else:
             response = requests.get(f"{BASE_URL}/api/{section}/{path}")
     else:
-        for _ in range(10):
+        base_delay = 0.5
+        total_wait_time = 0
+        attempt = 0
+
+        while total_wait_time < max_wait_time:
             if params:
                 response = requests.get(
                     f"{BASE_URL}/api/{section}/{path}", params=params
@@ -47,14 +52,23 @@ def fetch_api_data(
             result = response.json()
             if not ("result" in result and result["result"] == "miss"):
                 break
-            time.sleep(0.5)
+
+            # Calculate exponential backoff with a bit of randomness
+            delay = min(base_delay * (2**attempt), max_wait_time - total_wait_time)
+            if delay <= 0:
+                break
+
+            time.sleep(delay)
+            total_wait_time += delay
+            attempt += 1
         else:
-            print(f"Fetching {section}/{path} did not succeed after 10 retries")
+            print(
+                f"Fetching {section}/{path} did not succeed after {attempt} retries (waited {total_wait_time:.1f}s)"
+            )
             return None
     return response.json()
 
 
-@st.cache_data(ttl=1000)
 def fetch_cached_data(url: str, _params: Optional[dict] = None, key: str = "") -> dict:
     """
     Fetches cached data from storage with Streamlit caching. Constructs cache keys
