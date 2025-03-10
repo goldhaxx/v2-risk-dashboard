@@ -1,79 +1,15 @@
-from typing import Any, TypedDict
+import json
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
 from lib.api import fetch_cached_data
+from shared.types import PriceShockAssetGroup
 from utils import get_current_slot
 
 
-class UserLeveragesResponse(TypedDict):
-    leverages_none: list[Any]
-    leverages_up: list[Any]
-    leverages_down: list[Any]
-    user_keys: list[str]
-    distorted_oracles: list[str]
-
-
-def create_dataframes(leverages):
-    return [pd.DataFrame(lev) for lev in leverages]
-
-
-def calculate_spot_bankruptcies(df):
-    spot_bankrupt = df[
-        (df["spot_asset"] < df["spot_liability"]) & (df["net_usd_value"] < 0)
-    ]
-    return (spot_bankrupt["spot_liability"] - spot_bankrupt["spot_asset"]).sum()
-
-
-def calculate_total_bankruptcies(df):
-    return -df[df["net_usd_value"] < 0]["net_usd_value"].sum()
-
-
-def generate_oracle_moves(num_scenarios, oracle_distort):
-    return (
-        [-oracle_distort * (i + 1) * 100 for i in range(num_scenarios)]
-        + [0]
-        + [oracle_distort * (i + 1) * 100 for i in range(num_scenarios)]
-    )
-
-
-def get_df_plot(user_leverages, oracle_distort: float):
-    levs = user_leverages
-    dfs = (
-        create_dataframes(levs["leverages_down"])
-        + [pd.DataFrame(levs["leverages_none"])]
-        + create_dataframes(levs["leverages_up"])
-    )
-
-    spot_bankruptcies = [calculate_spot_bankruptcies(df) for df in dfs]
-    total_bankruptcies = [calculate_total_bankruptcies(df) for df in dfs]
-
-    num_scenarios = len(levs["leverages_down"])
-    oracle_moves = generate_oracle_moves(num_scenarios, oracle_distort)
-
-    df_plot = pd.DataFrame(
-        {
-            "Oracle Move (%)": oracle_moves,
-            "Total Bankruptcy ($)": total_bankruptcies,
-            "Spot Bankruptcy ($)": spot_bankruptcies,
-        }
-    )
-
-    df_plot = df_plot.sort_values("Oracle Move (%)")
-
-    df_plot["Perpetual Bankruptcy ($)"] = (
-        df_plot["Total Bankruptcy ($)"] - df_plot["Spot Bankruptcy ($)"]
-    )
-
-    return df_plot
-
-
-@st.cache_data(ttl=20)
-def price_shock_plot(user_leverages, oracle_distort: float):
-    df_plot = get_df_plot(user_leverages, oracle_distort)
-
+def price_shock_plot(df_plot):
     fig = go.Figure()
     for column in [
         "Total Bankruptcy ($)",
@@ -102,23 +38,29 @@ def price_shock_plot(user_leverages, oracle_distort: float):
 
 def price_shock_cached_page():
     params = st.query_params
-    asset_group = params.get("asset_group", "ignore stables")
+    asset_group = params.get("asset_group", PriceShockAssetGroup.IGNORE_STABLES.value)
+    n_scenarios_param = params.get("n_scenarios", 5)
+
+    asset_groups = [
+        PriceShockAssetGroup.IGNORE_STABLES.value,
+        PriceShockAssetGroup.JLP_ONLY.value,
+    ]
 
     asset_group = st.selectbox(
-        "Asset Group",
-        ["ignore stables", "jlp only"],
-        index=["ignore stables", "jlp only"].index(asset_group),
+        "Asset Group", asset_groups, index=asset_groups.index(asset_group)
     )
-    st.query_params.update({"asset_group": asset_group})  # type: ignore
+    st.query_params.update({"asset_group": asset_group})
 
-    n_scenarios = [5, 10]
+    scenario_options = [5, 10]
+    radio = st.radio(
+        "Scenarios",
+        scenario_options,
+        index=scenario_options.index(int(n_scenarios_param)),
+        key="n_scenarios",
+    )
+    n_scenarios = radio
 
-    # Create a list with the second option labeled as experimental
-    scenario_options = [5, "10 (experimental)"]
-    radio = st.radio("Scenarios", scenario_options, index=0, key="n_scenarios")
-    # Convert back to integer if the experimental option is selected
-    n_scenarios = 10 if radio == "10 (experimental)" else radio
-
+    st.query_params.update({"n_scenarios": n_scenarios})
     if n_scenarios == 5:
         oracle_distort = 0.05
     else:
@@ -150,14 +92,14 @@ def price_shock_cached_page():
     st.info(
         f"This data is for slot {result['slot']}, which is now {int(current_slot) - int(result['slot'])} slots old"
     )
-    fig = price_shock_plot(result, oracle_distort)
-    st.plotly_chart(fig)
+    df_plot = pd.DataFrame(json.loads(result["result"]))
 
-    df_summary = get_df_plot(result, oracle_distort)
+    fig = price_shock_plot(df_plot)
+    st.plotly_chart(fig)
 
     col1, col2 = st.columns(2)
     with col1:
-        df_liquidations = df_summary.drop(
+        df_liquidations = df_plot.drop(
             columns=["Spot Bankruptcy ($)", "Total Bankruptcy ($)"]
         )
         df_liquidations.rename(
@@ -169,8 +111,11 @@ def price_shock_cached_page():
         )
         st.dataframe(df_liquidations)
 
+    oracle_down_max = pd.DataFrame(json.loads(result["oracle_down_max"]))
+    oracle_up_max = pd.DataFrame(json.loads(result["oracle_up_max"]))
+
     with col2:
-        df_bad_debts = df_summary.drop(
+        df_bad_debts = df_plot.drop(
             columns=["Perpetual Bankruptcy ($)", "Total Bankruptcy ($)"]
         )
         df_bad_debts.rename(
@@ -182,14 +127,12 @@ def price_shock_cached_page():
         )
         st.dataframe(df_bad_debts)
 
-    oracle_down_max = pd.DataFrame(result["leverages_down"][-1])
     with st.expander(
         str("oracle down max bankrupt count=")
         + str(len(oracle_down_max[oracle_down_max.net_usd_value < 0]))
     ):
         st.dataframe(oracle_down_max)
 
-    oracle_up_max = pd.DataFrame(result["leverages_up"][-1], index=result["user_keys"])
     with st.expander(
         str("oracle up max bankrupt count=")
         + str(len(oracle_up_max[oracle_up_max.net_usd_value < 0]))

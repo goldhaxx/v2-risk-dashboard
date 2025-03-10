@@ -9,8 +9,11 @@ from driftpy.constants.spot_markets import mainnet_spot_market_configs
 from driftpy.drift_client import DriftClient
 from driftpy.drift_user import DriftUser
 from driftpy.math.margin import MarginCategory
+from driftpy.oracles.oracle_id import get_oracle_id
 from driftpy.types import OraclePriceData
 from driftpy.user_map.user_map import UserMap
+
+from shared.types import PriceShockAssetGroup
 
 
 def get_init_health(user: DriftUser):
@@ -77,7 +80,7 @@ def get_stable_metrics(x: DriftUser):
 
 def get_user_metrics_for_asset_liability(
     x: DriftUser,
-    margin_category: MarginCategory,
+    margin_category: MarginCategory | None,
 ):
     """
     Returns a dictionary of the user's health, leverage, and other metrics.
@@ -120,7 +123,7 @@ def get_user_metrics_for_asset_liability(
 
 def get_user_metrics_for_price_shock(
     x: DriftUser,
-    margin_category: MarginCategory,
+    margin_category: MarginCategory | None,
     oracle_cache: Optional[DriftClientCache] = None,
 ):
     """
@@ -165,40 +168,33 @@ def get_user_metrics_for_price_shock(
     return metrics
 
 
-def get_skipped_oracles(cov_matrix: Optional[str]) -> List[str]:
+def get_skipped_oracles(asset_group: PriceShockAssetGroup) -> List[str]:
     """
-    Determine which oracles to skip based on the cov_matrix parameter.
+    Determine which asset group of oracles to skip
+
+    NB: Generate a list of oracle addresses to *skip* i.e. not to distort
     """
-    if cov_matrix is None:
-        return []
-    if "+" in cov_matrix:
-        cov_matrix = cov_matrix.replace("+", " ")
-    groups = {
-        "sol only": ["SOL"],
-        "sol lst only": ["mSOL", "jitoSOL", "bSOL"],
-        "sol ecosystem only": ["PYTH", "JTO", "WIF", "JUP", "TNSR", "DRIFT"],
-        "meme": ["WIF"],
-        "wrapped only": ["wBTC", "wETH"],
-        "stables only": ["USD"],
-        "jlp only": ["JLP"],
-    }
-    if cov_matrix in groups:
-        print("COV MATRIX found", cov_matrix)
-        oracles = [
-            str(x.oracle)
-            for x in mainnet_spot_market_configs
-            if x.symbol not in groups[cov_matrix]
+    all_configs = mainnet_spot_market_configs + mainnet_perp_market_configs
+    if asset_group == PriceShockAssetGroup.IGNORE_STABLES:
+        usd_markets = [
+            get_oracle_id(x.oracle, x.oracle_source)
+            for x in all_configs
+            if "USD" in x.symbol
         ]
-        print("ORACLES", oracles)
-        return oracles
-    elif cov_matrix == "ignore stables":
-        return [str(x.oracle) for x in mainnet_spot_market_configs if "USD" in x.symbol]
+        return usd_markets
+    if asset_group == PriceShockAssetGroup.JLP_ONLY:
+        non_jlp_markets = [
+            get_oracle_id(x.oracle, x.oracle_source)
+            for x in all_configs
+            if "JLP" not in x.symbol
+        ]
+        return non_jlp_markets
     else:
         return []
 
 
 def calculate_leverages_for_asset_liability(
-    user_values: list[DriftUser], maintenance_category: MarginCategory
+    user_values: list[DriftUser], maintenance_category: MarginCategory | None
 ):
     """
     Calculate the leverages for all users at a given maintenance category
@@ -211,7 +207,7 @@ def calculate_leverages_for_asset_liability(
 
 def calculate_leverages_for_price_shock(
     user_values: list[DriftUser],
-    maintenance_category: MarginCategory,
+    maintenance_category: MarginCategory | None,
     oracle_cache: Optional[DriftClientCache] = None,
 ):
     """
@@ -262,22 +258,24 @@ def get_user_leverages_for_price_shock(
     drift_client: DriftClient,
     user_map: UserMap,
     oracle_distortion: float = 0.1,
-    oracle_group: Optional[str] = None,
+    asset_group: PriceShockAssetGroup = PriceShockAssetGroup.IGNORE_STABLES,
     scenarios: int = 5,
 ):
     user_keys = list(user_map.user_map.keys())
     user_vals = list(user_map.values())
+    all_configs = mainnet_spot_market_configs + mainnet_perp_market_configs
 
     print(f"User keys : {len(user_keys)}")
     new_oracles_dat_up = []
     new_oracles_dat_down = []
-    skipped_oracles = get_skipped_oracles(oracle_group)
+    skipped_oracles = get_skipped_oracles(asset_group)
+    print(
+        f"Skipping {len(skipped_oracles)} oracles (from a total of {len(all_configs)}) for asset group {asset_group}"
+    )
 
     for i in range(scenarios):
         new_oracles_dat_up.append({})
         new_oracles_dat_down.append({})
-
-    print("Skipped oracles:", skipped_oracles)
 
     distorted_oracles = []
     cache_up = copy.deepcopy(drift_client.account_subscriber.cache)
@@ -287,7 +285,7 @@ def get_user_leverages_for_price_shock(
         for i in range(scenarios):
             new_oracles_dat_up[i][key] = copy.deepcopy(val)
             new_oracles_dat_down[i][key] = copy.deepcopy(val)
-        if oracle_group is not None and key in skipped_oracles:
+        if key in skipped_oracles:
             continue
 
         distorted_oracles.append(key)
